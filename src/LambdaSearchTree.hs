@@ -107,7 +107,7 @@ nFormEvalMemo b unfold nform = lookup_nForm nform memo
   where memo = buildNFormSearchTree b 0 8 eval
         eval xs =
            let x = maybe (error $ "bad linear form"++(show xs)) id (treeForm xs)
-           in lamEvalF b unfold (\t -> lookup_nForm (linearForm' t 0) memo) (\t -> linearForm' t 0) x
+           in lamEvalF b unfold lamReduceHNF (\t -> lookup_nForm (linearForm' t 0) memo) (\t -> linearForm' t 0) x
 
 removeLabels :: [LamSymbol () String] -> (LinearForm,IntMap.IntMap String)
 removeLabels xs = f 0 xs [] IntMap.empty

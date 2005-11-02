@@ -53,7 +53,7 @@ options =
   , Option ['s']     ["stdin"]       (NoArg ReadStdIn)              "read from standard in"
   , Option ['e']     ["expression"]  (ReqArg Expression "EXPR")     "evaluate expression from command line"
   , Option ['f']     ["file"]        (ReqArg DefinitionFile "FILE") "read let definitions from a file"
-  , Option ['r']     ["trace"]       (OptArg Trace "[TRACE_NUM]")   "set tracing (and optional trace display lenght)"
+  , Option ['r']     ["trace"]       (OptArg Trace "TRACE_NUM")     "set tracing (and optional trace display length)"
   , Option ['h','?'] ["help"]        (NoArg PrintUsage)             "print this message"
   ]
 
@@ -92,19 +92,19 @@ readDefinitionFile b file =
         Left err -> fail (show err)
         Right b' -> return b'
 
+evalStdin :: LambdaCmdLineState -> IO ()
+evalStdin st = 
+   do expr <- hGetContents stdin
+      evalExpr st expr
+
 evalExpr :: LambdaCmdLineState -> String -> IO ()
 evalExpr st expr = 
     case parse (lambdaParser (cmd_binds st)) "" expr of
        Left msg -> fail (show msg)
        Right t  -> evalTerm st t
 
-evalStdin :: LambdaCmdLineState -> IO ()
-evalStdin st = 
-   do expr <- hGetContents stdin
-      evalExpr st expr
-
 evalTerm :: LambdaCmdLineState -> PureLambda () String -> IO ()
-evalTerm st t = putStrLn (show (eval t))
+evalTerm st t = putStrLn (printLam (eval t))
 
  where -- special case, if the top level lambda term is just a binding, always unfold it
        eval (Binding a x) = eval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (cmd_binds st))
@@ -112,7 +112,8 @@ evalTerm st t = putStrLn (show (eval t))
  
        eval' t = if (cmd_term st) 
                    then lamEvalMemo (cmd_binds st) (cmd_unfold st) t
-                   else lamEval     (cmd_binds st) (cmd_unfold st) t
+                   else lamEval     (cmd_binds st) (cmd_unfold st) lamReduceHNF t
+
 
 mapToShellState :: LambdaCmdLineState -> ShellState
 mapToShellState st = 
@@ -126,16 +127,7 @@ mapToShellState st =
   }
 
 runShell :: LambdaCmdLineState -> IO ()
-runShell st =
-  let shellSt = mapToShellState st
-  in lambdaShell shellSt
-
-lambdaCmdLine :: [String] -> IO ()
-lambdaCmdLine argv =
-   do st <- parseCmdLine argv
-      if (cmd_help st) 
-         then putStrLn (printUsage "")
-         else doCmdLine st
+runShell st = lambdaShell (mapToShellState st)
 
 doCmdLine :: LambdaCmdLineState -> IO ()
 doCmdLine st =
@@ -145,3 +137,10 @@ doCmdLine st =
            if (cmd_stdin st) 
               then evalStdin st
               else runShell st
+
+lambdaCmdLine :: [String] -> IO ()
+lambdaCmdLine argv =
+   do st <- parseCmdLine argv
+      if (cmd_help st) 
+         then putStrLn (printUsage "")
+         else doCmdLine st
