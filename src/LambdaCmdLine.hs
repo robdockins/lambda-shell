@@ -115,7 +115,7 @@ evalTerm st t = putStrLn (printLam (eval t))
                    else lamEval     (cmd_binds st) (cmd_unfold st) lamReduceHNF t
 
 
-mapToShellState :: LambdaCmdLineState -> ShellState
+mapToShellState :: LambdaCmdLineState -> LambdaShellState
 mapToShellState st = 
   initialShellState
   { termCheck   = cmd_term st
@@ -127,7 +127,7 @@ mapToShellState st =
   }
 
 runShell :: LambdaCmdLineState -> IO ()
-runShell st = lambdaShell (mapToShellState st)
+runShell st = lambdaShell (mapToShellState st) >> return ()
 
 doCmdLine :: LambdaCmdLineState -> IO ()
 doCmdLine st =

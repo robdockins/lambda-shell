@@ -1,5 +1,5 @@
 module LambdaShell
-( ShellState (..)
+( LambdaShellState (..)
 , initialShellState
 , lambdaShell
 )
@@ -14,12 +14,13 @@ import Control.Monad
 import Control.Concurrent
 import Control.Concurrent.MVar
 import qualified Control.Exception as Ex
-import qualified System.Console.Readline as Readline
+-- import qualified System.Console.Readline as Readline
 import qualified Data.Map as Map
-import Text.ParserCombinators.Parsec
+-- import Text.ParserCombinators.Parsec
+import System.Console.Shell
 
-data ShellState =
-  ShellState
+data LambdaShellState =
+  LambdaShellState
   { trace       :: Bool
   , traceNum    :: Int
   , termCheck   :: Bool
@@ -28,7 +29,7 @@ data ShellState =
   }
 
 initialShellState =
-  ShellState
+  LambdaShellState
   { trace       = False
   , traceNum    = 10
   , termCheck   = True
@@ -36,70 +37,36 @@ initialShellState =
   , fullUnfold  = False
   }
 
-lambdaShell :: ShellState -> IO ()
-lambdaShell state
-     = do Readline.initialize
-          Ex.finally (Readline.resetTerminal Nothing)
-                     (shellLoop state)
+lambdaShell :: LambdaShellState -> IO LambdaShellState
+lambdaShell init = do
+    desc <- mkShellDescription commands evaluate
+    runShell desc init
 
-  where shellLoop state =
-         do input <- Readline.readline "> "
-            case input of
-              Nothing  -> return ()
-              Just inp -> handleInput inp state shellLoop
-
-data ShellCommand
-  = SC_quit
-  | SC_termCheck
-  | SC_trace
-  | SC_setTraceNum Int
-  | SC_help
-  | SC_show String
-  | SC_showAll
-  | SC_unfold
-  | SC_eval Statement
+commands :: [ShellCommand LambdaShellState]
+commands =
+  [ exitCommand "quit"
+  , cmd "trace" toggleTrace "Toggles the trace mode"
+  ]
+  
+toggleTrace :: StateCommand LambdaShellState
+toggleTrace = StateCommand $ \st -> do
+   if trace st 
+      then putStrLn "trace off" >> return st{ trace = False }
+      else putStrLn "trace on"  >> return st{ trace = True }
 
 data Statement
   = Stmt_eval (PureLambda () String)
   | Stmt_let String (PureLambda () String)
 
-handleInput :: String -> ShellState -> (ShellState -> IO ()) -> IO ()
-handleInput input state cont =
+evaluate :: String -> LambdaShellState -> IO LambdaShellState
+evaluate str st = return st
+
+{-
+handleInput :: String -> LambdaShellState -> IO LambdaShellState
+handleInput input state =
    case parse (commandParser state) "" input of
-      Left err  -> putStrLn (show err) >> cont state
+      Left err  -> putStrLn (show err) >> return state
       Right cmd -> interpretCommand cmd state cont
-
-commandParser :: ShellState -> Parser ShellCommand
-commandParser state = do spaces; c <- cmdParser <|> stmtParser; spaces; eof; return c
-
- where stmtParser =
-        (do string "let"; spaces;
-            w <- nameParser
-            spaces; char '='; spaces
-            e <- lambdaParser (letBindings state)
-            return (SC_eval (Stmt_let w e)))
-        <|>
-        (lambdaParser (letBindings state) >>= return . SC_eval . Stmt_eval)
-
-       cmdParser = do
-          char ':'
-          (    try (string "quit"        >> return SC_quit)
-           <|> try (string "trace"       >> return SC_trace)
-           <|> try (string "termination" >> return SC_termCheck)
-           <|> try (string "help"        >> return SC_help)
-           <|> try (string "unfold"      >> return SC_unfold)
-           <|> try (string "showAll"     >> return SC_showAll)
-           <|> try
-               (do string "show"
-                   spaces
-                   name <- nameParser
-                   return (SC_show name))
-           <|> try
-               (do string "traceNum"
-                   spaces
-                   i <- many1 digit
-                   return (SC_setTraceNum (read i)) )
-           )
 
 interpretCommand :: ShellCommand -> ShellState -> (ShellState -> IO ()) -> IO ()
 interpretCommand cmd state cont =
@@ -119,28 +86,26 @@ interpretCommand cmd state cont =
     SC_show name     -> showBinding name state >> cont state
     SC_showAll       -> showBindings state >> cont state
     SC_eval stmt     -> evalStmt stmt state cont
+-}
 
-printHelp :: ShellState -> IO ()
-printHelp state = putStrLn "you need help..."
-
-showBinding :: String -> ShellState -> IO ()
+showBinding :: String -> LambdaShellState -> IO ()
 showBinding name state =
     case Map.lookup name (letBindings state) of
         Nothing -> putStrLn $ concat ["'",name,"' not bound"]
         Just t  -> putStrLn $ concat [name," = ",printLam t]
 
-showBindings :: ShellState -> IO ()
+showBindings :: LambdaShellState -> IO ()
 showBindings state = putStrLn $
    Map.foldWithKey
        (\name t x -> concat [name," = ",printLam t,"\n",x])
        ""
        (letBindings state)
 
-evalStmt :: Statement -> ShellState -> (ShellState -> IO ()) -> IO ()
+evalStmt :: Statement -> LambdaShellState -> (LambdaShellState -> IO ()) -> IO ()
 evalStmt (Stmt_eval expr) state cont     = evalExpr expr state cont
 evalStmt (Stmt_let name expr) state cont = cont state{ letBindings = Map.insert name expr (letBindings state) }
 
-evalExpr :: PureLambda () String -> ShellState -> (ShellState -> IO ()) -> IO ()
+evalExpr :: PureLambda () String -> LambdaShellState -> (LambdaShellState -> IO ()) -> IO ()
 evalExpr t state cont = eval t
  where
        -- special case, if the top level lambda term is just a binding, always unfold it
@@ -148,7 +113,7 @@ evalExpr t state cont = eval t
        eval x             = eval' x
 
        eval' t  = if trace state 
-                     then traceEval t state cont
+                     then undefined -- traceEval t state cont
                      else putStrLn (printLam (eval'' t)) >> cont state
 
 
@@ -157,7 +122,8 @@ evalExpr t state cont = eval t
                      else lamEval     (letBindings state) (fullUnfold state) lamReduceHNF t
 
 
-traceEval :: PureLambda () String -> ShellState -> (ShellState -> IO ()) -> IO ()
+{-
+traceEval :: PureLambda () String -> LambdaShellState -> (LambdaShellState -> IO ()) -> IO ()
 traceEval t state cont = showTrace 0
 
   where -- list of evaluation steps
@@ -181,3 +147,4 @@ traceEval t state cont = showTrace 0
               Just ('p':_)  -> showTrace (max 0 (start-(traceNum state)))
               Just ('q':_)  -> cont state
               _             -> getAction start
+-}
