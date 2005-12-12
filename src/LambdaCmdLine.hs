@@ -7,54 +7,54 @@ import Maybe
 import Data.List
 import qualified Data.Map as Map
 import System.IO
-import Distribution.GetOpt
-import Text.ParserCombinators.Parsec
+import System.Console.GetOpt
+import Text.ParserCombinators.Parsec (parse)
 
 import Lambda
-import LambdaSearchTree
 import LambdaParser
 import LambdaShell
+import Version
 
 data LambdaCmdLineArgs
   = FullUnfold
-  | TerminationCheck
   | ReadStdIn
   | Expression String
   | DefinitionFile String
   | Trace (Maybe String)
   | PrintUsage
+  | PrintVersion
 
 data LambdaCmdLineState
    = LambdaCmdLineState
-     { cmd_unfold :: Bool
-     , cmd_term   :: Bool
-     , cmd_stdin  :: Bool
-     , cmd_expr   :: Maybe String
-     , cmd_binds  :: Bindings () String
-     , cmd_help   :: Bool
-     , cmd_trace  :: Maybe (Maybe Int)
+     { cmd_unfold  :: Bool
+     , cmd_stdin   :: Bool
+     , cmd_expr    :: Maybe String
+     , cmd_binds   :: Bindings () String
+     , cmd_help    :: Bool
+     , cmd_version :: Bool
+     , cmd_trace   :: Maybe (Maybe Int)
      }
 
 initialCmdLineState =
   LambdaCmdLineState
-  { cmd_unfold = False
-  , cmd_term   = True
-  , cmd_stdin  = False
-  , cmd_expr   = Nothing
-  , cmd_binds  = Map.empty
-  , cmd_help   = False
-  , cmd_trace  = Nothing
+  { cmd_unfold  = False
+  , cmd_stdin   = False
+  , cmd_expr    = Nothing
+  , cmd_binds   = Map.empty
+  , cmd_help    = False
+  , cmd_version = False
+  , cmd_trace   = Nothing
   }
 
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
   [ Option ['u']     ["unfold"]      (NoArg FullUnfold)             "perform full unfolding of let-bound terms"
-  , Option ['t']     ["termination"] (NoArg TerminationCheck)       "turn of termination checking"
   , Option ['s']     ["stdin"]       (NoArg ReadStdIn)              "read from standard in"
   , Option ['e']     ["expression"]  (ReqArg Expression "EXPR")     "evaluate expression from command line"
   , Option ['f']     ["file"]        (ReqArg DefinitionFile "FILE") "read let definitions from a file"
   , Option ['r']     ["trace"]       (OptArg Trace "TRACE_NUM")     "set tracing (and optional trace display length)"
   , Option ['h','?'] ["help"]        (NoArg PrintUsage)             "print this message"
+  , Option ['v']     ["version"]     (NoArg PrintVersion)           "print version information"
   ]
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
@@ -66,11 +66,11 @@ parseCmdLine argv =
   where errMsg errs = printUsage (concat (intersperse "\n" errs))
   
         applyFlag :: LambdaCmdLineArgs -> LambdaCmdLineState -> IO LambdaCmdLineState
-        applyFlag FullUnfold            st = return st{ cmd_unfold = True }
-        applyFlag TerminationCheck      st = return st{ cmd_term   = False }
-        applyFlag ReadStdIn             st = return st{ cmd_stdin  = True }
-        applyFlag PrintUsage            st = return st{ cmd_help   = True }
-        applyFlag (Trace Nothing)       st = return st{ cmd_trace  = Just Nothing }
+        applyFlag FullUnfold            st = return st{ cmd_unfold  = True }
+        applyFlag ReadStdIn             st = return st{ cmd_stdin   = True }
+        applyFlag PrintUsage            st = return st{ cmd_help    = True }
+        applyFlag PrintVersion          st = return st{ cmd_version = True }
+        applyFlag (Trace Nothing)       st = return st{ cmd_trace   = Just Nothing }
         applyFlag (Trace (Just num))    st = case readDec num of
                                                 ((n,[]):_) -> return st{ cmd_trace = Just (Just n) }
                                                 _          -> fail (errMsg [concat ["'",num,"' must be a positive integer"]])
@@ -110,16 +110,13 @@ evalTerm st t = putStrLn (printLam (eval t))
        eval (Binding a x) = eval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (cmd_binds st))
        eval x             = eval' x
  
-       eval' t = if (cmd_term st) 
-                   then lamEvalMemo (cmd_binds st) (cmd_unfold st) t
-                   else lamEval     (cmd_binds st) (cmd_unfold st) lamReduceHNF t
+       eval' t = lamEval (cmd_binds st) (cmd_unfold st) lamReduceHNF t
 
 
 mapToShellState :: LambdaCmdLineState -> LambdaShellState
 mapToShellState st = 
   initialShellState
-  { termCheck   = cmd_term st
-  , letBindings = cmd_binds st
+  { letBindings = cmd_binds st
   , fullUnfold  = cmd_unfold st
   , trace       = isJust (cmd_trace st)
   , traceNum    = let x = traceNum initialShellState
@@ -141,6 +138,8 @@ doCmdLine st =
 lambdaCmdLine :: [String] -> IO ()
 lambdaCmdLine argv =
    do st <- parseCmdLine argv
-      if (cmd_help st) 
+      if (cmd_help st)
          then putStrLn (printUsage "")
-         else doCmdLine st
+         else if (cmd_version st) 
+                 then putStrLn versionInfo
+                 else doCmdLine st

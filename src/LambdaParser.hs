@@ -2,6 +2,8 @@ module LambdaParser
 ( nameParser
 , lambdaParser
 , definitionFileParser
+, Statement (..)
+, statementParser
 )
 where
 
@@ -11,14 +13,37 @@ import Text.ParserCombinators.Parsec
 
 import Lambda
 
+data Statement
+  = Stmt_eval (PureLambda () String)
+  | Stmt_let String (PureLambda () String)
+
 nameParser :: Parser String
 nameParser = 
   do a  <- letter
      as <- many alphaNum
      return (a:as)
 
+statementParser :: Bindings () String -> Parser Statement
+statementParser b = 
+  spaces >>
+    (   (letDefParser b     >>=  return . uncurry Stmt_let)
+    <|> (lambdaParser b     >>= return . Stmt_eval)
+    )
+
 lambdaParser :: Bindings () String -> Parser (PureLambda () String)
-lambdaParser b = do spaces; e <- appParser b []; spaces; return e
+lambdaParser b = do e <- appParser b []; spaces; return e
+
+letDefParser :: Bindings () String -> Parser (String,PureLambda () String)
+letDefParser b = do
+    string "let"
+    many1 space
+    n <- nameParser
+    spaces
+    char '='
+    spaces
+    e <- appParser b []
+    spaces
+    return (n,e)
 
 definitionFileParser :: Bindings () String -> Parser (Bindings () String)
 definitionFileParser b = 
@@ -67,4 +92,3 @@ appParser :: Bindings () String -> [String] -> Parser (PureLambda () String)
 appParser b labels = 
    do exprs <- sepEndBy1 (lambdaParser' b labels) (many1 space)
       return (foldl1 (App ()) exprs)
-

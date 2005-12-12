@@ -214,7 +214,8 @@ lamEval     :: Bindings a l
              -> PureLambda a l 
              -> PureLambda a l
 
-lamEval b unfold reduce = lamEvalF b unfold reduce (lamEval b unfold reduce) id
+lamEval b unfold reduce = 
+    lamEvalF b unfold reduce (lamEval b unfold reduce) id
 
 
 -------------------------------------------------------------------------------------
@@ -226,4 +227,5 @@ lamEvalTrace :: Bindings a l
              -> PureLambda a l 
              -> [PureLambda a l]
 
-lamEvalTrace b unfold reduce x = lamEvalF b unfold reduce ((x:) . lamEvalTrace b unfold reduce) (:[]) x
+lamEvalTrace b unfold reduce x = 
+    lamEvalF b unfold reduce ((x:) . lamEvalTrace b unfold reduce) (:[]) x
