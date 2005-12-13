@@ -1,3 +1,6 @@
+-- | This module defines parsers for lambda terms
+--   and for \"let\" bound definitions.
+
 module LambdaParser 
 ( nameParser
 , lambdaParser
@@ -13,25 +16,62 @@ import Text.ParserCombinators.Parsec
 
 import Lambda
 
+-- | A type representing either a lambda term to evaluate
+--   or a let binding.
 data Statement
   = Stmt_eval (PureLambda () String)
   | Stmt_let String (PureLambda () String)
+  | Stmt_isEq (PureLambda () String) 
+              (PureLambda () String)
+  | Stmt_empty
 
+-- | Parser for an identifier.  An identifier is
+--   a letter followed by zero or more alphanumeric characters.
 nameParser :: Parser String
 nameParser = 
   do a  <- letter
      as <- many alphaNum
      return (a:as)
 
+-- | Parser for a statement.
+-- 
+-- @
+--    stmt -\> \'let\' name \'=\' lambda
+--    stmt -\> lambda
+-- @
+
 statementParser :: Bindings () String -> Parser Statement
-statementParser b = 
-  spaces >>
-    (   (letDefParser b     >>=  return . uncurry Stmt_let)
-    <|> (lambdaParser b     >>= return . Stmt_eval)
-    )
+statementParser b = do
+  spaces
+  x <- (   try (letDefParser b     >>= return . uncurry Stmt_let)
+       <|> try (compParser b       >>= return . uncurry Stmt_isEq)
+       <|> (lambdaParser b         >>= return . Stmt_eval)
+       <|> (return Stmt_empty)
+       )
+  eof 
+  return x
+
+-- | Parser for a lambda term.  Function application is left associative.
+-- 
+-- @
+--   lambda -\> name
+--   lambda -\> \'(\' lambda \')\'
+--   lambda -\> lambda lambda
+--   lambda -\> \'\\\' {name} \'.\' lambda
+-- @
 
 lambdaParser :: Bindings () String -> Parser (PureLambda () String)
 lambdaParser b = do e <- appParser b []; spaces; return e
+
+compParser :: Bindings () String -> Parser (PureLambda () String,PureLambda () String)
+compParser b = do
+    x <- lambdaParser b
+    spaces
+    string "=="
+    spaces
+    y <- lambdaParser b
+    spaces
+    return (x,y)
 
 letDefParser :: Bindings () String -> Parser (String,PureLambda () String)
 letDefParser b = do
@@ -44,6 +84,12 @@ letDefParser b = do
     e <- appParser b []
     spaces
     return (n,e)
+
+-- | Parser a file of definitions.  Each definition takes the form
+--
+-- @
+--  def -\> \'let\' name \'=\' lambda \';\'
+-- @
 
 definitionFileParser :: Bindings () String -> Parser (Bindings () String)
 definitionFileParser b = 

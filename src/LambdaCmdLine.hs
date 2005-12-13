@@ -5,6 +5,7 @@ module LambdaCmdLine
 import Numeric
 import Maybe
 import Data.List
+import Data.Char
 import qualified Data.Map as Map
 import System.IO
 import System.Console.GetOpt
@@ -19,10 +20,10 @@ data LambdaCmdLineArgs
   = FullUnfold
   | ReadStdIn
   | Expression String
-  | DefinitionFile String
   | Trace (Maybe String)
   | PrintUsage
   | PrintVersion
+  | Reduction String
 
 data LambdaCmdLineState
    = LambdaCmdLineState
@@ -33,6 +34,7 @@ data LambdaCmdLineState
      , cmd_help    :: Bool
      , cmd_version :: Bool
      , cmd_trace   :: Maybe (Maybe Int)
+     , cmd_red     :: RS
      }
 
 initialCmdLineState =
@@ -44,6 +46,7 @@ initialCmdLineState =
   , cmd_help    = False
   , cmd_version = False
   , cmd_trace   = Nothing
+  , cmd_red     = lamReduceWHNF
   }
 
 options :: [OptDescr LambdaCmdLineArgs]
@@ -51,17 +54,20 @@ options =
   [ Option ['u']     ["unfold"]      (NoArg FullUnfold)             "perform full unfolding of let-bound terms"
   , Option ['s']     ["stdin"]       (NoArg ReadStdIn)              "read from standard in"
   , Option ['e']     ["expression"]  (ReqArg Expression "EXPR")     "evaluate expression from command line"
-  , Option ['f']     ["file"]        (ReqArg DefinitionFile "FILE") "read let definitions from a file"
   , Option ['r']     ["trace"]       (OptArg Trace "TRACE_NUM")     "set tracing (and optional trace display length)"
   , Option ['h','?'] ["help"]        (NoArg PrintUsage)             "print this message"
   , Option ['v']     ["version"]     (NoArg PrintVersion)           "print version information"
+  , Option ['t']     ["strategy"]    (ReqArg Reduction "REDUCTION_STRATEGY")
+           "set the reduction strategy (one of whnf, hnf, nf, strict)"
   ]
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
 parseCmdLine argv = 
    case getOpt RequireOrder options argv of
-     (opts,_,[]) -> foldl (>>=) (return initialCmdLineState) $ map applyFlag opts
-     (_,_,errs)  -> fail (errMsg errs)
+     (opts,files,[]) -> (foldl (>>=) (return initialCmdLineState) $ map applyFlag opts) >>= \st ->
+                        (foldl (>>=) (return st)                  $ map loadDefs files)
+
+     (_,_,errs)      -> fail (errMsg errs)
 
   where errMsg errs = printUsage (concat (intersperse "\n" errs))
   
@@ -78,17 +84,28 @@ parseCmdLine argv =
         applyFlag (Expression ex)       st = case cmd_expr st of
                                                 Nothing -> return st{ cmd_expr = Just ex }
                                                 _       -> fail (errMsg ["'-e' option may only occur once"])
-        applyFlag (DefinitionFile file) st = do binds <- readDefinitionFile (cmd_binds st) file
-                                                return st{ cmd_binds = Map.union binds (cmd_binds st) }
+
+        applyFlag (Reduction str) st =
+            case map toLower str of
+                "whnf"   -> return st{ cmd_red = lamReduceWHNF }
+		"hnf"    -> return st{ cmd_red = lamReduceHNF }
+                "nf"     -> return st{ cmd_red = lamReduceNF }
+                "strict" -> return st{ cmd_red = lamStrictNF }
+                _        -> fail (concat ["'",str,"' is not a valid reduction strategy"])
+                
 
 printUsage :: String -> String
-printUsage str = (usageInfo "usage: lambda {OPTION}\n" options) ++ str
+printUsage str = (usageInfo "usage: lambda {<option>} [{<file>}]\n" options) ++ str
 
+loadDefs :: FilePath -> LambdaCmdLineState -> IO LambdaCmdLineState
+loadDefs path st = do
+  binds <- readDefinitionFile (cmd_binds st) path
+  return st{ cmd_binds = Map.union binds (cmd_binds st) }
 
 readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
-readDefinitionFile b file =
-  do str <- openFile file ReadMode >>= hGetContents
-     case parse (definitionFileParser b) file str of
+readDefinitionFile b file = do
+  str <- openFile file ReadMode >>= hGetContents
+  case parse (definitionFileParser b) file str of
         Left err -> fail (show err)
         Right b' -> return b'
 
@@ -121,6 +138,7 @@ mapToShellState st =
   , trace       = isJust (cmd_trace st)
   , traceNum    = let x = traceNum initialShellState
                   in maybe x (maybe x id) (cmd_trace st)
+  , redStrategy = cmd_red st
   }
 
 runShell :: LambdaCmdLineState -> IO ()
@@ -135,11 +153,19 @@ doCmdLine st =
               then evalStdin st
               else runShell st
 
+-- | Parse command line options and run the lambda shell
 lambdaCmdLine :: [String] -> IO ()
 lambdaCmdLine argv =
    do st <- parseCmdLine argv
       if (cmd_help st)
-         then putStrLn (printUsage "")
+         then putStrLn (printUsage usageNotes)
          else if (cmd_version st) 
                  then putStrLn versionInfo
                  else doCmdLine st
+
+
+usageNotes :: String
+usageNotes =
+    "Any files listed after the options will be parsed as a series of "++
+    "\"let\" definitions, which will be in scope when the shell starts "++
+    "(or when the -e expression is evaluated)"
