@@ -12,9 +12,7 @@ import Lambda
 import LambdaParser
 
 import qualified Data.Map as Map
-import System.Console.Shell (runShell, cmd, exitCommand, helpCommand,
-			     ShellCommand, StateCommand(..), mkShellDescription,
-                             Completion (..), Completable(..) )
+import System.Console.Shell
 import Text.ParserCombinators.Parsec (parse)
 
 type RS = ReductionStrategy () String
@@ -65,6 +63,7 @@ commands =
   , exitCommand "exit"
   , helpCommand "help"
   , cmd "trace"   toggleTrace   "Toggles the trace mode"
+  , cmd "traceStep" setTraceStep "Sets the number of steps shown in trace mode"
   , cmd "unfold"  toggleUnfold "Toggles the full unfold mode"
   , cmd "showall" showBindings "Shows all let bindings"
   , cmd "show"    showBinding "Show a let binding"
@@ -85,6 +84,10 @@ toggleUnfold = StateCommand $ \st -> do
    if fullUnfold st
       then putStrLn "full unfold off" >> return st{ fullUnfold = False }
       else putStrLn "full unfold on"  >> return st{ fullUnfold = True }
+
+
+setTraceStep :: Int -> StateCommand LambdaShellState
+setTraceStep step = StateCommand $ \st -> return st{ traceNum = step }
 
 showBinding :: Completable LetBinding -> StateCommand LambdaShellState
 showBinding (Completable name) = StateCommand $ \st -> do
@@ -134,14 +137,17 @@ evalStmt (Stmt_empty) st         = return st
 
 
 evalExpr :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
-evalExpr t st = eval t >> return st
+evalExpr t st = doEval t >> return st
  where
        -- special case, if the top level lambda term is just a binding, always unfold it
-       eval (Binding a x) = eval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (letBindings st))
-       eval x             = eval' x
+       doEval (Binding a x) = doEval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (letBindings st))
+       doEval x             = doEval' x
 
-       eval'  t = putStrLn (printLam (eval'' t))
-       eval'' t = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
+       doEval' x = if (trace st)
+                      then traceEval x st
+                      else (putStrLn (printLam (eval x))) >> return st
+
+       eval t = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
 
 compareExpr :: PureLambda () String 
             -> PureLambda () String
@@ -156,3 +162,65 @@ compareExpr x y st = do
      return st
 
   where eval t = lamEval (letBindings st) True lamReduceNF t
+
+
+data TraceShellState 
+   = TraceShellState
+     { tracePos  :: Int
+     , traceStep :: Int
+     , traceList :: [PureLambda () String]
+     }
+
+mkTraceDesc :: IO (ShellDescription TraceShellState)
+mkTraceDesc = do
+  desc <- initialShellDescription
+  return desc{ prompt = tracePrompt
+             , commandStyle = OnlyCommands
+	     , shellCommands = traceShellCommands
+             , beforePrompt = printTrace
+             }
+        
+tracePrompt :: String
+tracePrompt = "  ]"
+
+traceShellCommands :: [ShellCommand TraceShellState]
+traceShellCommands =
+  [ cmd "p" tracePrev "previous"
+  , cmd "n" traceNext "next"
+  , exitCommand "q"
+  ]
+
+printTrace :: TraceShellState -> IO ()
+printTrace st = do
+  putStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
+	take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
+
+tracePrev :: StateCommand TraceShellState
+tracePrev = StateCommand $ \st -> do
+  let x = max 0 (tracePos st - traceStep st)
+  return st{ tracePos = x}
+
+traceNext :: StateCommand TraceShellState
+traceNext = StateCommand $ \st -> do
+  let x = tracePos st + traceStep st
+  if null (drop (tracePos st) (traceList st))
+     then return st
+     else return st{ tracePos = x }
+
+mkTraceState :: PureLambda () String -> LambdaShellState -> IO TraceShellState
+mkTraceState term st =
+   return TraceShellState
+          { tracePos = 0
+          , traceStep = traceNum st
+          , traceList = lamEvalTrace (letBindings st) (fullUnfold st) (redStrategy st) term
+          }
+
+traceSubshell :: PureLambda () String -> IO (Subshell LambdaShellState TraceShellState)
+traceSubshell term = do
+  desc <- mkTraceDesc
+  simpleSubshell (mkTraceState term) desc
+
+traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
+traceEval term st = do
+  subShell <- traceSubshell term
+  runSubshell subShell st
