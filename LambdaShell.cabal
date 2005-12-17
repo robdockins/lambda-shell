@@ -1,0 +1,19 @@
+Name:            LambdaShell
+Version:         0.1
+License:         GPL
+Author:          Robert Dockins
+Synopsis:        Simple shell for evaluating lambda expressions
+Stability:       Alpha
+Build-Depends:   
+    base, haskell98, parsec,
+    ReadlineShell >= 0.1,
+    readline >= 1.0
+
+Executable:      labmdaShell
+Main-Is:         main.hs
+Hs-Source-Dirs: 
+    src
+Extensions:
+    MultiParamTypeClasses
+Extra-libraries:
+    readline
