@@ -13,7 +13,7 @@ Build-Depends:
 
 Executable:      labmdaShell
 Main-Is:         main.hs
-Hs-Source-Dirs: 
+Hs-Source-Dir:
     src
 Extensions:
     MultiParamTypeClasses
