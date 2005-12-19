@@ -6,6 +6,7 @@ module LambdaShell
 )
 where
 
+import System.IO
 import Data.List (isPrefixOf)
 
 import Lambda
@@ -17,14 +18,20 @@ import Text.ParserCombinators.Parsec (parse)
 
 type RS = ReductionStrategy () String
 
+-------------------------------------------------------
+-- Define types to allow completion of let-bound names
+
+completeLetBindings :: LambdaShellState -> String -> IO [String]
+completeLetBindings st prefix =
+    return 
+    $ filter (prefix `isPrefixOf`)
+    $ Map.keys
+    $ letBindings st
+
 data LetBinding = LetBinding
 
 instance Completion LetBinding LambdaShellState where
-  complete _ st prefix = return 
-                         $ filter (prefix `isPrefixOf`)
-                         $ Map.keys
-                         $ letBindings st
-
+  complete _         = completeLetBindings
   completableLabel _ = "<name>"
 
 -- | Keeps track of all the state that is needed for the
@@ -55,22 +62,27 @@ initialShellState =
 lambdaShell :: LambdaShellState -> IO LambdaShellState
 lambdaShell init = do
     desc <- mkShellDescription commands evaluate
-    runShell desc init
+    let desc' = desc{ defaultCompletions = Just completeLetBindings }
+    runShell desc' init
+
+----------------------------------------------------------------
+-- Definition of all the shell commands
 
 commands :: [ShellCommand LambdaShellState]
 commands =
   [ exitCommand "quit"
   , exitCommand "exit"
   , helpCommand "help"
-  , cmd "trace"   toggleTrace   "Toggles the trace mode"
+  , cmd "trace"     toggleTrace  "Toggles the trace mode"
   , cmd "traceStep" setTraceStep "Sets the number of steps shown in trace mode"
-  , cmd "unfold"  toggleUnfold "Toggles the full unfold mode"
-  , cmd "showall" showBindings "Shows all let bindings"
-  , cmd "show"    showBinding "Show a let binding"
-  , cmd "whnf"    setRedWHNF "Set reduction strategy to weak head normal form"
-  , cmd "hnf"     setRedHNF "Set reduction strategy to head normal form"
-  , cmd "nf"      setRedNF  "Set reduction strategy to normal form"
-  , cmd "strict"  setRedStrict "Use applicative order (strict) reduction"
+  , cmd "dumpTrace" dumpTrace    "Dumps a trace of the named term into a file"
+  , cmd "unfold"    toggleUnfold "Toggles the full unfold mode"
+  , cmd "showall"   showBindings "Shows all let bindings"
+  , cmd "show"      showBinding  "Show a let binding"
+  , cmd "whnf"      setRedWHNF   "Set reduction strategy to weak head normal form"
+  , cmd "hnf"       setRedHNF    "Set reduction strategy to head normal form"
+  , cmd "nf"        setRedNF     "Set reduction strategy to normal form"
+  , cmd "strict"    setRedStrict "Use applicative order (strict) reduction"
   ]
   
 toggleTrace :: StateCommand LambdaShellState
@@ -85,6 +97,19 @@ toggleUnfold = StateCommand $ \st -> do
       then putStrLn "full unfold off" >> return st{ fullUnfold = False }
       else putStrLn "full unfold on"  >> return st{ fullUnfold = True }
 
+dumpTrace :: File -> Int -> Completable LetBinding -> StateCommand LambdaShellState
+dumpTrace (File f) steps (Completable termStr) = StateCommand $ \st -> do
+
+   case parse (lambdaParser (letBindings st)) "" termStr of
+      Left msg   -> putStrLn (show msg)
+      Right term -> do
+         let trace = lamEvalTrace (letBindings st) (fullUnfold st) 
+                                  (redStrategy st)
+                                  (unfoldTop (letBindings st) term)
+         h <- openFile f WriteMode
+         hPutStr h $ unlines $ map printLam $ take steps $ trace
+         hClose h
+   return st
 
 setTraceStep :: Int -> StateCommand LambdaShellState
 setTraceStep step = StateCommand $ \st -> return st{ traceNum = step }
@@ -105,7 +130,6 @@ showBindings = StateCommand $ \st -> do
        (letBindings st)
    return st
 
-
 setRedWHNF :: StateCommand LambdaShellState
 setRedWHNF = setRed lamReduceWHNF "weak head normal form"
 
@@ -123,6 +147,10 @@ setRed strategy name = StateCommand $ \st -> do
   putStrLn ("using reduction strategy: "++name)
   return st{ redStrategy = strategy }
 
+
+----------------------------------------------------------------
+-- Normal statement evaluation
+
 evaluate :: String -> LambdaShellState -> IO LambdaShellState
 evaluate str st = do
   case parse (statementParser (letBindings st)) "" str of
@@ -135,34 +163,36 @@ evalStmt (Stmt_isEq x y) st      = compareExpr x y st
 evalStmt (Stmt_let name expr) st = return st{ letBindings = Map.insert name expr (letBindings st) }
 evalStmt (Stmt_empty) st         = return st
 
-
 evalExpr :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
-evalExpr t st = doEval t >> return st
- where
-       -- special case, if the top level lambda term is just a binding, always unfold it
-       doEval (Binding a x) = doEval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (letBindings st))
-       doEval x             = doEval' x
 
-       doEval' x = if (trace st)
+evalExpr t st = doEval (unfoldTop (letBindings st) t)
+
+ where doEval x = if (trace st)
                       then traceEval x st
                       else (putStrLn (printLam (eval x))) >> return st
 
        eval t = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
 
+traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
+
+traceEval term st = do
+  subShell <- traceSubshell term
+  runSubshell subShell st
+
 compareExpr :: PureLambda () String 
             -> PureLambda () String
 	    -> LambdaShellState 
 	    -> IO LambdaShellState
+
 compareExpr x y st = do
-     let x' = eval x
-     let y' = eval y
-     if alphaEq x' y'
+     if normalEq (letBindings st) x y
         then putStrLn "equal"
         else putStrLn "not equal"
      return st
 
-  where eval t = lamEval (letBindings st) True lamReduceNF t
 
+----------------------------------------------------------------
+-- All the stuff for the tracing subshell
 
 data TraceShellState 
    = TraceShellState
@@ -219,8 +249,3 @@ traceSubshell :: PureLambda () String -> IO (Subshell LambdaShellState TraceShel
 traceSubshell term = do
   desc <- mkTraceDesc
   simpleSubshell (mkTraceState term) desc
-
-traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
-traceEval term st = do
-  subShell <- traceSubshell term
-  runSubshell subShell st

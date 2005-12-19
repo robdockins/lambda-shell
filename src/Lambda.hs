@@ -4,13 +4,13 @@
 
  Lambda terms are represented with de Brujin indicies.  Lambdas
  are annotated with a label for the variable that is used when
- displaying.  Lambda terms may be references to let-bound terms;
- These are unfolded in explicit reduction steps.  Let bindings are
+ displaying.  Lambda terms may be references to let-bindings;
+ these are unfolded in explicit reduction steps.  Let bindings are
  non-recursive; that is, the bound name is not in scope during
  the definition.
 -}
 
-module Lambda( 
+module Lambda (
 -- * Type Definitions
   Bindings
 , ReductionStrategy
@@ -18,12 +18,15 @@ module Lambda(
 -- * Lamda Term Datatype
 , PureLambda (..)
 
+-- * Comparison Functions
+, alphaEq
+, normalEq
 
 -- * Auxilary Functions
 , lookupBinding
-, alphaEq
 , printLam
 , lamSubst
+, unfoldTop
 
 -- * Reduction Strategies
 , lamReduceWHNF
@@ -35,6 +38,7 @@ module Lambda(
 , lamEvalF
 , lamEval
 , lamEvalTrace
+
 ) where
 
 import qualified Env as Env
@@ -71,6 +75,22 @@ alphaEq (App _ x1 y1)  (App _ x2 y2)  = alphaEq x1 x2 && alphaEq y1 y2
 alphaEq (Var _ i1)     (Var _ i2)     = i1 == i2
 alphaEq (Binding _ n1) (Binding _ n2) = n1 == n2
 alphaEq _              _              = False
+
+
+-------------------------------------------------------------------
+-- | Defines an eqivalance predicate on normalizing terms, where
+--   terms with alpha-equivalant normal forms are in the relation.
+--   This function will diverge for non-normalizing terms.
+
+normalEq     :: Bindings a l    -- ^ Let bindings in scope
+             -> PureLambda a l
+             -> PureLambda a l
+             -> Bool
+
+normalEq binds t1 t2 = 
+    let n1 = lamEval binds True lamReduceNF t1
+        n2 = lamEval binds True lamReduceNF t2
+    in alphaEq n1 n2
 
 -------------------------------------------------------------------
 -- | Show a lambda term, minimizing parenthises and disambiguating
@@ -257,14 +277,28 @@ lamEval bind unfold red = eval
 -------------------------------------------------------------------------------------
 -- | Traced evaluation; the result is a list of the reduction
 --   steps taken by the given reduction stragegy.  A non-terminating
---   term (under the given strategy) will result an infinite list.
+--   term (under the given strategy) will result in an infinite list.
+--   For a normalizing term, the last element in the list will be the 
+--   normal  form.
 
 lamEvalTrace :: Bindings a l          -- ^ A set of bindings for unfolding
              -> Bool		      -- ^ Apply full unfolding ?	   
              -> ReductionStrategy a l -- ^ Reduction strategy to use	   
              -> PureLambda a l	      -- ^ The term to reduce             
-             -> [PureLambda a l]      -- ^ The list of reductions
+             -> [PureLambda a l]      -- ^ The list of intermediate reductions
 
 lamEvalTrace bind unfold red = eval
   where evalF  = lamEvalF bind unfold red
         eval x = evalF ((x:) . eval) (:[]) x
+
+
+-----------------------------------------------------------------------------------------
+-- | If a lambda term is just a let binding, this function will unfold it; otherwise
+--   it will return the term unchanged.  It will result in bottom if the term is not bound.
+
+unfoldTop     :: Bindings () String 
+              -> PureLambda () String
+              -> PureLambda () String
+
+unfoldTop binds (Binding a x) = Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x binds
+unfoldTop binds x             = x

@@ -8,6 +8,7 @@ import Data.List
 import Data.Char
 import qualified Data.Map as Map
 import System.IO
+import System.Exit
 import System.Console.GetOpt
 import Text.ParserCombinators.Parsec (parse)
 
@@ -19,7 +20,7 @@ import Version
 data LambdaCmdLineArgs
   = FullUnfold
   | ReadStdIn
-  | Expression String
+  | Program String
   | Trace (Maybe String)
   | PrintUsage
   | PrintVersion
@@ -29,7 +30,7 @@ data LambdaCmdLineState
    = LambdaCmdLineState
      { cmd_unfold  :: Bool
      , cmd_stdin   :: Bool
-     , cmd_expr    :: Maybe String
+     , cmd_input   :: Maybe String
      , cmd_binds   :: Bindings () String
      , cmd_help    :: Bool
      , cmd_version :: Bool
@@ -41,19 +42,19 @@ initialCmdLineState =
   LambdaCmdLineState
   { cmd_unfold  = False
   , cmd_stdin   = False
-  , cmd_expr    = Nothing
+  , cmd_input   = Nothing
   , cmd_binds   = Map.empty
   , cmd_help    = False
   , cmd_version = False
   , cmd_trace   = Nothing
-  , cmd_red     = lamReduceWHNF
+  , cmd_red     = lamReduceNF
   }
 
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
   [ Option ['u']     ["unfold"]      (NoArg FullUnfold)             "perform full unfolding of let-bound terms"
   , Option ['s']     ["stdin"]       (NoArg ReadStdIn)              "read from standard in"
-  , Option ['e']     ["expression"]  (ReqArg Expression "EXPR")     "evaluate expression from command line"
+  , Option ['e']     ["program"]     (ReqArg Program "PROGRAM")     "evaluate statements from command line"
   , Option ['r']     ["trace"]       (OptArg Trace "TRACE_NUM")     "set tracing (and optional trace display length)"
   , Option ['h','?'] ["help"]        (NoArg PrintUsage)             "print this message"
   , Option ['v']     ["version"]     (NoArg PrintVersion)           "print version information"
@@ -81,8 +82,8 @@ parseCmdLine argv =
                                                 ((n,[]):_) -> return st{ cmd_trace = Just (Just n) }
                                                 _          -> fail (errMsg [concat ["'",num,"' must be a positive integer"]])
 
-        applyFlag (Expression ex)       st = case cmd_expr st of
-                                                Nothing -> return st{ cmd_expr = Just ex }
+        applyFlag (Program pgm)         st = case cmd_input st of
+                                                Nothing -> return st{ cmd_input = Just pgm }
                                                 _       -> fail (errMsg ["'-e' option may only occur once"])
 
         applyFlag (Reduction str) st =
@@ -95,7 +96,14 @@ parseCmdLine argv =
                 
 
 printUsage :: String -> String
-printUsage str = (usageInfo "usage: lambda {<option>} [{<file>}]\n" options) ++ str
+printUsage str = concat
+   [usageInfo "usage: lambda {<option>} [{<file>}]\n" options
+   ,"\n\n"
+   ,str
+   ,"\n\n"
+   ,versionInfo
+   ,"\n"
+   ]
 
 loadDefs :: FilePath -> LambdaCmdLineState -> IO LambdaCmdLineState
 loadDefs path st = do
@@ -110,25 +118,44 @@ readDefinitionFile b file = do
         Right b' -> return b'
 
 evalStdin :: LambdaCmdLineState -> IO ()
-evalStdin st = 
-   do expr <- hGetContents stdin
-      evalExpr st expr
+evalStdin st = hGetContents stdin >>= evalInput st
 
-evalExpr :: LambdaCmdLineState -> String -> IO ()
-evalExpr st expr = 
-    case parse (lambdaParser (cmd_binds st)) "" expr of
-       Left msg -> fail (show msg)
-       Right t  -> evalTerm st t
+evalInput :: LambdaCmdLineState -> String -> IO ()
+evalInput st expr = do
+    case parse (statementsParser (cmd_binds st)) "" expr of
+       Left msg    -> fail (show msg)
+       Right stmts -> foldl (>>=) (return st) $ map (flip evalStmt) $ stmts
+    return ()
+
+evalStmt :: LambdaCmdLineState -> Statement -> IO LambdaCmdLineState
+evalStmt st (Stmt_eval t)     = evalTerm st t         >> return st
+evalStmt st (Stmt_isEq t1 t2) = compareTerms st t1 t2 >> return st
+evalStmt st (Stmt_let name t) = return st{ cmd_binds = Map.insert name t (cmd_binds st) }
+evalStmt st (Stmt_empty)      = return st
 
 evalTerm :: LambdaCmdLineState -> PureLambda () String -> IO ()
-evalTerm st t = putStrLn (printLam (eval t))
+evalTerm st t = doEval (unfoldTop (cmd_binds st) t)
+ where doEval t = 
+         case cmd_trace st of
+            Nothing       -> putStrLn (printLam (eval t))
+            Just Nothing  -> printTrace 50 t
+            Just (Just x) -> printTrace x t
 
- where -- special case, if the top level lambda term is just a binding, always unfold it
-       eval (Binding a x) = eval' (Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x (cmd_binds st))
-       eval x             = eval' x
- 
-       eval' t = lamEval (cmd_binds st) (cmd_unfold st) lamReduceHNF t
+       printTrace x t = putStr $ unlines $ map printLam $ take x $ trace t
 
+       eval t  = lamEval      (cmd_binds st) (cmd_unfold st) (cmd_red st) t
+       trace t = lamEvalTrace (cmd_binds st) (cmd_unfold st) (cmd_red st) t
+
+
+compareTerms :: LambdaCmdLineState 
+            -> PureLambda () String
+            -> PureLambda () String
+            -> IO ()
+
+compareTerms st t1 t2 = do
+  if normalEq (cmd_binds st) t1 t2 
+     then putStrLn "equal"     >> exitWith ExitSuccess
+     else putStrLn "not equal" >> exitWith (ExitFailure 100)
 
 mapToShellState :: LambdaCmdLineState -> LambdaShellState
 mapToShellState st = 
@@ -142,14 +169,17 @@ mapToShellState st =
   }
 
 runShell :: LambdaCmdLineState -> IO ()
-runShell st = lambdaShell (mapToShellState st) >> return ()
+runShell st = do
+   putStrLn versionInfo
+   lambdaShell (mapToShellState st)
+   return ()
 
 doCmdLine :: LambdaCmdLineState -> IO ()
 doCmdLine st =
-   case (cmd_expr st) of
-       Just expr -> evalExpr st expr
+   case (cmd_input st) of
+       Just expr -> evalInput st expr
        Nothing   -> 
-           if (cmd_stdin st) 
+           if (cmd_stdin st)
               then evalStdin st
               else runShell st
 
@@ -163,9 +193,9 @@ lambdaCmdLine argv =
                  then putStrLn versionInfo
                  else doCmdLine st
 
-
 usageNotes :: String
 usageNotes =
     "Any files listed after the options will be parsed as a series of "++
     "\"let\" definitions, which will be in scope when the shell starts "++
     "(or when the -e expression is evaluated)"
+    

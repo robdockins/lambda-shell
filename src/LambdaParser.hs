@@ -7,6 +7,7 @@ module LambdaParser
 , definitionFileParser
 , Statement (..)
 , statementParser
+, statementsParser
 )
 where
 
@@ -26,12 +27,32 @@ data Statement
   | Stmt_empty
 
 -- | Parser for an identifier.  An identifier is
---   a letter followed by zero or more alphanumeric characters.
+--   a letter followed by zero or more alphanumeric characters (or underscores).
 nameParser :: Parser String
 nameParser = 
   do a  <- letter
-     as <- many alphaNum
+     as <- many (char '_' <|> alphaNum)
      return (a:as)
+
+-- | Parser for multiple statements.
+--
+-- @
+--   stmts -\> stmt ';' stmts
+--   stmts -\>
+-- @
+statementsParser :: Bindings () String -> Parser [Statement]
+statementsParser b = do spaces; x <- p b; eof; return x
+
+ where p b = do x <- stmtParser b
+                let b' = case x of
+                          (Stmt_let name t) -> Map.insert name t b
+                          _ -> b
+                spaces
+                ( do char ';'
+                     spaces
+                     xs <- p b'
+                     return (x:xs))
+                 <|> (return [x])
 
 -- | Parser for a statement.
 -- 
@@ -39,17 +60,21 @@ nameParser =
 --    stmt -\> \'let\' name \'=\' lambda
 --    stmt -\> lambda
 -- @
-
 statementParser :: Bindings () String -> Parser Statement
 statementParser b = do
-  spaces
-  x <- (   try (letDefParser b     >>= return . uncurry Stmt_let)
-       <|> try (compParser b       >>= return . uncurry Stmt_isEq)
-       <|> (lambdaParser b         >>= return . Stmt_eval)
-       <|> (return Stmt_empty)
-       )
-  eof 
-  return x
+   spaces
+   x <- stmtParser b
+   spaces
+   eof
+   return x
+
+
+stmtParser :: Bindings () String -> Parser Statement
+stmtParser b =
+       try (letDefParser b     >>= return . uncurry Stmt_let)
+   <|> try (compParser b       >>= return . uncurry Stmt_isEq)
+   <|> (lambdaParser b         >>= return . Stmt_eval)
+   <|> (return Stmt_empty)
 
 -- | Parser for a lambda term.  Function application is left associative.
 -- 
@@ -61,7 +86,7 @@ statementParser b = do
 -- @
 
 lambdaParser :: Bindings () String -> Parser (PureLambda () String)
-lambdaParser b = do e <- appParser b []; spaces; return e
+lambdaParser b = do spaces; e <- appParser b []; spaces; return e
 
 compParser :: Bindings () String -> Parser (PureLambda () String,PureLambda () String)
 compParser b = do
