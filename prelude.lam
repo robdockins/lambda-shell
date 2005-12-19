@@ -1,14 +1,26 @@
-true  = \t f. t;
-false = \t f. f;
-if    = \b x y. b x y;
-and   = \x y. if x y false;
-or    = \x y. if x true y;
-not   = \x.   if x false true;
+true    = \t f. t;
+false   = \t f. f;
+if      = \b x y. b x y;
+not     = \x.   if x false true;
+and     = \x y. if x y false;
+or      = \x y. if x true y;
+xor     = \x y. if x (not y) y;
 
-zero  = \f x. x;
-succ  = \n f x. f (n f x);
-plus  = \m n f x. m f (n f x);
-mul   = \m n f. m (n f);
+zero    = \f x. x;
+succ    = \n f x. f (n f x);
+pred    = \n f x. n (\g h. h (g f)) (\u. x) (\u. u);
+
+plus    = \m n f x. m f (n f x);
+sub     = \m n. (n pred) m;
+mul     = \m n f. m (n f);
+
+even    = \n. n not true;
+iszero  = \m. m (\x. false) true;
+lte     = \m n. iszero (sub m n);
+gte     = \m n. iszero (sub n m);
+eq      = \m n. and (lte m n) (gte m n);
+lt      = \m n. and (lte m n) (not (gte m n));
+gt      = \m n. and (gte m n) (not (lte m n));
 
 one   = succ zero;
 two   = succ one;
@@ -27,5 +39,91 @@ S = \f g x. (f x) (g x);
 W = \f x. f x x;
 B = \f g x. f (g x);
 Y = \f. (\x. f (x x)) \x. f (x x);
-
 omega = (\x. x x) \x. x x;
+
+pow = \m. Y (\powF n. n (\x. mul m x) one);
+
+fac = Y (\facF n. if (iszero n)
+                     one 
+                     (mul n (facF (pred n))));
+
+pair = \x y f. f x y;
+fst  = \p. p (\x y. x);
+snd  = \p. p (\x y. y);
+
+match = \x pats. x (\n f. f (fst ((n snd) pats)));
+
+nil  = \    w. w zero (\f. f);
+cons = \h t w. w one  (\f. f h t);
+
+head = \l. match l (pair nil
+                   (pair (\h t. h)
+                    zero));
+
+tail = \l. match l (pair nil
+                   (pair (\h t. t)
+                    zero));
+
+index = \n l. head (n tail l);
+
+foldr = \f z. Y (\foldF l. match l (pair z
+                                   (pair (\h t. f h (foldF t))
+                                    zero)));
+
+foldl = \f. Y (\foldF r l. match l (pair r
+                                   (pair (\h t. foldF (f r h) t)
+                                    zero)));
+
+len = foldl (\x h. succ x) zero;
+
+map = \f. Y (\mapF l. match l (pair nil
+                             (pair (\h t. cons (f h) (mapF t))
+                              zero)));
+
+unfold = \g until. Y (\unfoldF x. if (until x)
+                                       (cons x nil)
+                                       (cons x (unfoldF (g x))));
+
+iterate = \g. unfold g (K false);
+nats = iterate succ zero;
+
+upTo = \n. unfold succ (\x. gte x n) zero;
+
+zipWith = \f. Y (\zipF l1 l2. match l1
+                     (pair nil
+                     (pair (\h1 t1. match l2
+                        (pair nil
+                        (pair (\h2 t2.
+                           cons (f h1 h2) (zipF t1 t2))
+                         zero)))
+                       zero)));
+
+zip = zipWith pair;
+
+take = \n l. zipWith K l (tail (upTo n));
+drop = \n l. n tail l;
+
+minAux = foldl (\x y. if (lt y x) y x);
+
+min  = \l. match l
+             (pair nil
+             (pair minAux
+              zero));
+
+maxAux = foldl (\x y. if (gt y x) y x);
+
+max  = \l. match l
+             (pair nil
+             (pair maxAux
+              zero));
+
+remove = \x. Y (\removeF l. match l
+              (pair nil
+              (pair (\h t.
+                 if (eq h x) t (cons h (removeF t)))
+               zero)));
+
+insertSort = Y (\sortF l. match l
+             (pair nil
+             (pair (\h t. (\x. cons x (sortF (remove x l))) (minAux h t))
+              zero)));
