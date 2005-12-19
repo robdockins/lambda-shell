@@ -125,7 +125,7 @@ showLam env c (App _ t1 t2)    =
 
 showLam env c (Lam _ label t) =
     let env' = Env.insert label env
-    in parenIf (c == AppLeft) $
+    in parenIf (c /= TopContext) $
           concat ["\\"
                  ,Env.lookup 0 env'
                  ,". "
