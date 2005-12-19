@@ -2,6 +2,7 @@ module LambdaShell
 ( LambdaShellState (..)
 , initialShellState
 , lambdaShell
+, readDefinitionFile
 , RS
 )
 where
@@ -11,6 +12,7 @@ import Data.List (isPrefixOf)
 
 import Lambda
 import LambdaParser
+import Version
 
 import qualified Data.Map as Map
 import System.Console.Shell
@@ -42,6 +44,7 @@ instance Completion LetBinding LambdaShellState where
 
 -- | Keeps track of all the state that is needed for the
 --   operation of the lambda shell.
+
 data LambdaShellState =
   LambdaShellState
   { trace       :: Bool      -- ^ Step through the reduction one redex at a time
@@ -78,6 +81,18 @@ lambdaShell init = do
 
 
 
+-----------------------------------------------------------------
+-- read definitions from a file
+
+readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
+readDefinitionFile b file = do
+  str <- openFile file ReadMode >>= hGetContents
+  case parse (definitionFileParser b) file str of
+        Left err -> fail (show err)
+        Right b' -> return b'
+
+
+
 ----------------------------------------------------------------
 -- Definition of all the shell commands
 
@@ -86,16 +101,21 @@ commands =
   [ exitCommand "quit"
   , exitCommand "exit"
   , helpCommand "help"
-  , cmd "trace"     toggleTrace  "Toggles the trace mode"
-  , cmd "traceStep" setTraceStep "Sets the number of steps shown in trace mode"
-  , cmd "dumpTrace" dumpTrace    "Dumps a trace of the named term into a file"
-  , cmd "unfold"    toggleUnfold "Toggles the full unfold mode"
-  , cmd "showall"   showBindings "Shows all let bindings"
-  , cmd "show"      showBinding  "Show a let binding"
-  , cmd "whnf"      setRedWHNF   "Set reduction strategy to weak head normal form"
-  , cmd "hnf"       setRedHNF    "Set reduction strategy to head normal form"
-  , cmd "nf"        setRedNF     "Set reduction strategy to normal form"
-  , cmd "strict"    setRedStrict "Use applicative order (strict) reduction"
+  , cmd "trace"      toggleTrace     "Toggles the trace mode"
+  , cmd "traceStep"  setTraceStep    "Sets the number of steps shown in trace mode"
+  , cmd "dumpTrace"  dumpTrace       "Dumps a trace of the named term into a file"
+  , cmd "unfold"     toggleUnfold    "Toggles the full unfold mode"
+  , cmd "showall"    showBindings    "Shows all let bindings"
+  , cmd "show"       showBinding     "Show a let binding"
+  , cmd "whnf"       setRedWHNF      "Set reduction strategy to weak head normal form"
+  , cmd "hnf"        setRedHNF       "Set reduction strategy to head normal form"
+  , cmd "nf"         setRedNF        "Set reduction strategy to normal form"
+  , cmd "strict"     setRedStrict    "Use applicative order (strict) reduction"
+  , cmd "nowarranty" printNoWarranty "Print the warranty disclaimer"
+  , cmd "gpl"        printGPL        "Print the GNU GPLv2, under which this software is licensed"
+  , cmd "version"    printVersion    "Print version info"
+  , cmd "load"       loadDefFile     "Load definitions from a file"
+  , cmd "clear"      clearBindings   "Clear all let bindings"
   ]
   
 toggleTrace :: StateCommand LambdaShellState
@@ -143,6 +163,14 @@ showBindings = StateCommand $ \st -> do
        (letBindings st)
    return st
 
+clearBindings :: StateCommand LambdaShellState
+clearBindings = StateCommand $ \st -> return st{ letBindings = Map.empty }
+
+loadDefFile :: File -> StateCommand LambdaShellState
+loadDefFile (File path) = StateCommand $ \st -> do
+   newBinds <- readDefinitionFile (letBindings st) path
+   return st{ letBindings = newBinds }   
+
 setRedWHNF :: StateCommand LambdaShellState
 setRedWHNF = setRed lamReduceWHNF "weak head normal form"
 
@@ -160,7 +188,14 @@ setRed strategy name = StateCommand $ \st -> do
   putStrLn ("using reduction strategy: "++name)
   return st{ redStrategy = strategy }
 
+printNoWarranty :: SimpleCommand LambdaShellState
+printNoWarranty = SimpleCommand (putStr noWarranty)
 
+printGPL :: SimpleCommand LambdaShellState
+printGPL = SimpleCommand (putStrLn gpl)
+
+printVersion :: SimpleCommand LambdaShellState
+printVersion = SimpleCommand (putStrLn versionInfo)
 
 ----------------------------------------------------------------
 -- Normal statement evaluation
@@ -226,14 +261,11 @@ data TraceShellState
 mkTraceDesc :: IO (ShellDescription TraceShellState)
 mkTraceDesc = do
   desc <- initialShellDescription
-  return desc{ prompt = tracePrompt
-             , commandStyle = OnlyCommands
+  return desc{ prompt        = "  ]"
+             , commandStyle  = OnlyCommands
 	     , shellCommands = traceShellCommands
-             , beforePrompt = printTrace
+             , beforePrompt  = printTrace
              }
-        
-tracePrompt :: String
-tracePrompt = "  ]"
 
 traceShellCommands :: [ShellCommand TraceShellState]
 traceShellCommands =
