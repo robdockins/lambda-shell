@@ -25,6 +25,7 @@ module LambdaParser
 ( nameParser
 , lambdaParser
 , definitionFileParser
+, stripComments
 , Statement (..)
 , statementParser
 , statementsParser
@@ -144,7 +145,11 @@ letDefParser b = do
     spaces
     return (n,e)
 
-
+stripComments :: String -> String
+stripComments (x:xs)
+  | x == '#'  = stripComments (dropWhile (/= '\n') xs)
+  | otherwise = x : stripComments xs
+stripComments [] = []
 
 -- | Parser a file of definitions.  Each definition takes the form
 --

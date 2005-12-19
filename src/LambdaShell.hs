@@ -106,8 +106,9 @@ lambdaShell init = do
 
 readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
 readDefinitionFile b file = do
-  str <- openFile file ReadMode >>= hGetContents
-  case parse (definitionFileParser b) file str of
+  str  <- openFile file ReadMode >>= hGetContents
+  let str' = stripComments str
+  case parse (definitionFileParser b) file str' of
         Left err -> fail (show err)
         Right b' -> return b'
 
