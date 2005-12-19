@@ -18,6 +18,7 @@ import Text.ParserCombinators.Parsec (parse)
 
 type RS = ReductionStrategy () String
 
+
 -------------------------------------------------------
 -- Define types to allow completion of let-bound names
 
@@ -33,6 +34,11 @@ data LetBinding = LetBinding
 instance Completion LetBinding LambdaShellState where
   complete _         = completeLetBindings
   completableLabel _ = "<name>"
+
+
+
+----------------------------------------------------------
+-- Define the shell state
 
 -- | Keeps track of all the state that is needed for the
 --   operation of the lambda shell.
@@ -56,6 +62,11 @@ initialShellState =
   , redStrategy = lamReduceWHNF
   }
 
+
+
+-----------------------------------------------------------------
+-- Main entry point to the shell
+
 -- | Run an interactive shell starting with the
 --   given shell state and returning the final,
 --   possibly modified, state.
@@ -64,6 +75,8 @@ lambdaShell init = do
     desc <- mkShellDescription commands evaluate
     let desc' = desc{ defaultCompletions = Just completeLetBindings }
     runShell desc' init
+
+
 
 ----------------------------------------------------------------
 -- Definition of all the shell commands
@@ -148,6 +161,7 @@ setRed strategy name = StateCommand $ \st -> do
   return st{ redStrategy = strategy }
 
 
+
 ----------------------------------------------------------------
 -- Normal statement evaluation
 
@@ -157,11 +171,14 @@ evaluate str st = do
      Left err   -> putStrLn (show err) >> return st
      Right stmt -> evalStmt stmt st
 
+
 evalStmt :: Statement -> LambdaShellState -> IO LambdaShellState
 evalStmt (Stmt_eval expr) st     = evalExpr expr st
 evalStmt (Stmt_isEq x y) st      = compareExpr x y st
 evalStmt (Stmt_let name expr) st = return st{ letBindings = Map.insert name expr (letBindings st) }
 evalStmt (Stmt_empty) st         = return st
+
+
 
 evalExpr :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
 
@@ -173,11 +190,15 @@ evalExpr t st = doEval (unfoldTop (letBindings st) t)
 
        eval t = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
 
+
+
 traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
 
 traceEval term st = do
   subShell <- traceSubshell term
   runSubshell subShell st
+
+
 
 compareExpr :: PureLambda () String 
             -> PureLambda () String
@@ -189,6 +210,7 @@ compareExpr x y st = do
         then putStrLn "equal"
         else putStrLn "not equal"
      return st
+
 
 
 ----------------------------------------------------------------

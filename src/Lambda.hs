@@ -154,6 +154,7 @@ lamShift c d (Lam a label t)  = Lam a label (lamShift (c+1) d t)
 lamShift c d (App a t1 t2)    = App a (lamShift c d t1) (lamShift c d t2)
 lamShift c d b@(Binding _ _)  = b
 
+
 ------------------------------------------------------------------------------
 -- | Capture-avoiding substitution;
 --   substitute \'s\' into \'t\', replacing all free variables with index 0.
@@ -190,6 +191,8 @@ type ReductionStrategy a l
     -> PureLambda a l
     -> Maybe (PureLambda a l)
 
+
+
 -------------------------------------------------------------------------------------
 -- | Single-step normal order reduction to Weak Head Normal Form (WHNF)
 
@@ -201,6 +204,7 @@ lamReduceWHNF b unfold (Lam a l t)             = Nothing
 lamReduceWHNF b unfold (Var _ _)               = Nothing
 lamReduceWHNF b unfold (Binding a name)        = if unfold then Just (lookupBinding name b) else Nothing
 
+
 -------------------------------------------------------------------------------------
 -- | Single-step normal order reduction to Head Normal Form (HNF)
 
@@ -211,6 +215,7 @@ lamReduceHNF b unfold (App a t1 t2)            = lamReduceHNF b True t1   >>= \t
 lamReduceHNF b unfold (Lam a l t)              = lamReduceHNF b unfold t  >>= \t'  -> return (Lam a l t')
 lamReduceHNF b unfold (Var _ _)                = Nothing
 lamReduceHNF b unfold (Binding a name)         = if unfold then Just (lookupBinding name b) else Nothing
+
 
 
 --------------------------------------------------------------------------------------
@@ -226,6 +231,8 @@ lamReduceNF b unfold (Lam a l t)               = lamReduceNF b unfold t   >>= \t
 lamReduceNF b unfold (Var _ _)                 = Nothing
 lamReduceNF b unfold (Binding a name)          = if unfold then Just (lookupBinding name b) else Nothing
 
+
+
 ---------------------------------------------------------------------------------------
 -- | Single-step applicative order reduction to Normal Form (NF)
 
@@ -240,6 +247,8 @@ lamStrictNF b unfold (App a t1 t2)             = (lamStrictNF b True t1   >>= \t
 lamStrictNF b unfold (Lam a l t)               = lamStrictNF b unfold t   >>= \t'  -> return (Lam a l t')
 lamStrictNF b unfold (Var _ _)                 = Nothing
 lamStrictNF b unfold (Binding a name)          = if unfold then Just (lookupBinding name b) else Nothing
+
+
 
 ---------------------------------------------------------------------------------------
 -- | Helper for various kinds of evaluation.  Applies the function \'z\' if
@@ -259,6 +268,9 @@ lamEvalF b unfold reduce f z x =
         Just x' -> f x'
         Nothing -> z x
 
+
+
+
 -------------------------------------------------------------------------------------
 -- | Big-step reduction; that is, apply the reduction strategy until
 --   it fails to reduce any futher.
@@ -272,6 +284,8 @@ lamEval     :: Bindings a l            -- ^ A set of bindings for unfolding
 lamEval bind unfold red = eval
   where evalF  = lamEvalF bind unfold red
         eval x = evalF eval id x
+
+
 
 
 -------------------------------------------------------------------------------------
@@ -290,6 +304,9 @@ lamEvalTrace :: Bindings a l          -- ^ A set of bindings for unfolding
 lamEvalTrace bind unfold red = eval
   where evalF  = lamEvalF bind unfold red
         eval x = evalF ((x:) . eval) (:[]) x
+
+
+
 
 
 -----------------------------------------------------------------------------------------

@@ -17,14 +17,32 @@ import LambdaParser
 import LambdaShell
 import Version
 
-data LambdaCmdLineArgs
-  = FullUnfold
-  | ReadStdIn
-  | Program String
-  | Trace (Maybe String)
-  | PrintUsage
-  | PrintVersion
-  | Reduction String
+-----------------------------------------------------------------------
+-- Main entry point for the command line tool
+
+-- | Parse command line options and run the lambda shell
+lambdaCmdLine :: [String] -> IO ()
+lambdaCmdLine argv =
+   do st <- parseCmdLine argv
+      if (cmd_help st)
+         then putStrLn (printUsage usageNotes)
+         else if (cmd_version st) 
+                 then putStrLn versionInfo
+                 else doCmdLine st
+
+
+doCmdLine :: LambdaCmdLineState -> IO ()
+doCmdLine st =
+   case (cmd_input st) of
+       Just expr -> evalInput st expr
+       Nothing -> 
+           if (cmd_stdin st)
+              then evalStdin st
+              else runShell st
+
+
+--------------------------------------------------------------
+-- Holds important values parsed from the command line
 
 data LambdaCmdLineState
    = LambdaCmdLineState
@@ -50,6 +68,20 @@ initialCmdLineState =
   , cmd_red     = lamReduceNF
   }
 
+
+-------------------------------------------------------------
+-- Set up the command line options
+
+data LambdaCmdLineArgs
+  = FullUnfold
+  | ReadStdIn
+  | Program String
+  | Trace (Maybe String)
+  | PrintUsage
+  | PrintVersion
+  | Reduction String
+
+
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
   [ Option ['u']     ["unfold"]      (NoArg FullUnfold)             "perform full unfolding of let-bound terms"
@@ -61,6 +93,11 @@ options =
   , Option ['t']     ["strategy"]    (ReqArg Reduction "REDUCTION_STRATEGY")
            "set the reduction strategy (one of whnf, hnf, nf, strict)"
   ]
+
+
+
+-----------------------------------------------------------------
+-- Parser for the command line
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
 parseCmdLine argv = 
@@ -95,30 +132,30 @@ parseCmdLine argv =
                 _        -> fail (concat ["'",str,"' is not a valid reduction strategy"])
                 
 
-printUsage :: String -> String
-printUsage str = concat
-   [usageInfo "usage: lambda {<option>} [{<file>}]\n" options
-   ,"\n\n"
-   ,str
-   ,"\n\n"
-   ,versionInfo
-   ,"\n"
-   ]
+-----------------------------------------------------------------------
+-- Actually run the shell
 
-loadDefs :: FilePath -> LambdaCmdLineState -> IO LambdaCmdLineState
-loadDefs path st = do
-  binds <- readDefinitionFile (cmd_binds st) path
-  return st{ cmd_binds = Map.union binds (cmd_binds st) }
+mapToShellState :: LambdaCmdLineState -> LambdaShellState
+mapToShellState st = 
+  initialShellState
+  { letBindings = cmd_binds st
+  , fullUnfold  = cmd_unfold st
+  , trace       = isJust (cmd_trace st)
+  , traceNum    = let x = traceNum initialShellState
+                  in maybe x (maybe x id) (cmd_trace st)
+  , redStrategy = cmd_red st
+  }
 
-readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
-readDefinitionFile b file = do
-  str <- openFile file ReadMode >>= hGetContents
-  case parse (definitionFileParser b) file str of
-        Left err -> fail (show err)
-        Right b' -> return b'
+runShell :: LambdaCmdLineState -> IO ()
+runShell st = do
+   putStrLn versionInfo
+   lambdaShell (mapToShellState st)
+   return ()
 
-evalStdin :: LambdaCmdLineState -> IO ()
-evalStdin st = hGetContents stdin >>= evalInput st
+
+
+--------------------------------------------------------------------------
+-- For dealing with input from stdin or the command line
 
 evalInput :: LambdaCmdLineState -> String -> IO ()
 evalInput st expr = do
@@ -127,11 +164,17 @@ evalInput st expr = do
        Right stmts -> foldl (>>=) (return st) $ map (flip evalStmt) $ stmts
     return ()
 
+evalStdin :: LambdaCmdLineState -> IO ()
+evalStdin st = hGetContents stdin >>= evalInput st
+
+
 evalStmt :: LambdaCmdLineState -> Statement -> IO LambdaCmdLineState
 evalStmt st (Stmt_eval t)     = evalTerm st t         >> return st
 evalStmt st (Stmt_isEq t1 t2) = compareTerms st t1 t2 >> return st
 evalStmt st (Stmt_let name t) = return st{ cmd_binds = Map.insert name t (cmd_binds st) }
 evalStmt st (Stmt_empty)      = return st
+
+
 
 evalTerm :: LambdaCmdLineState -> PureLambda () String -> IO ()
 evalTerm st t = doEval (unfoldTop (cmd_binds st) t)
@@ -157,45 +200,40 @@ compareTerms st t1 t2 = do
      then putStrLn "equal"     >> exitWith ExitSuccess
      else putStrLn "not equal" >> exitWith (ExitFailure 100)
 
-mapToShellState :: LambdaCmdLineState -> LambdaShellState
-mapToShellState st = 
-  initialShellState
-  { letBindings = cmd_binds st
-  , fullUnfold  = cmd_unfold st
-  , trace       = isJust (cmd_trace st)
-  , traceNum    = let x = traceNum initialShellState
-                  in maybe x (maybe x id) (cmd_trace st)
-  , redStrategy = cmd_red st
-  }
 
-runShell :: LambdaCmdLineState -> IO ()
-runShell st = do
-   putStrLn versionInfo
-   lambdaShell (mapToShellState st)
-   return ()
 
-doCmdLine :: LambdaCmdLineState -> IO ()
-doCmdLine st =
-   case (cmd_input st) of
-       Just expr -> evalInput st expr
-       Nothing   -> 
-           if (cmd_stdin st)
-              then evalStdin st
-              else runShell st
+-------------------------------------------------------------------------
+-- Read definitions from a file
 
--- | Parse command line options and run the lambda shell
-lambdaCmdLine :: [String] -> IO ()
-lambdaCmdLine argv =
-   do st <- parseCmdLine argv
-      if (cmd_help st)
-         then putStrLn (printUsage usageNotes)
-         else if (cmd_version st) 
-                 then putStrLn versionInfo
-                 else doCmdLine st
+loadDefs :: FilePath -> LambdaCmdLineState -> IO LambdaCmdLineState
+loadDefs path st = do
+  binds <- readDefinitionFile (cmd_binds st) path
+  return st{ cmd_binds = Map.union binds (cmd_binds st) }
+
+readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
+readDefinitionFile b file = do
+  str <- openFile file ReadMode >>= hGetContents
+  case parse (definitionFileParser b) file str of
+        Left err -> fail (show err)
+        Right b' -> return b'
+
+
+
+-----------------------------------------------------------------------
+-- Printing stuff
+
+printUsage :: String -> String
+printUsage str = concat
+   [usageInfo "usage: lambda {<option>} [{<file>}]\n" options
+   ,"\n\n"
+   ,str
+   ,"\n\n"
+   ,versionInfo
+   ,"\n"
+   ]
 
 usageNotes :: String
 usageNotes =
     "Any files listed after the options will be parsed as a series of "++
     "\"let\" definitions, which will be in scope when the shell starts "++
     "(or when the -e expression is evaluated)"
-    

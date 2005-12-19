@@ -26,6 +26,8 @@ data Statement
               (PureLambda () String)
   | Stmt_empty
 
+
+
 -- | Parser for an identifier.  An identifier is
 --   a letter followed by zero or more alphanumeric characters (or underscores).
 nameParser :: Parser String
@@ -33,6 +35,23 @@ nameParser =
   do a  <- letter
      as <- many (char '_' <|> alphaNum)
      return (a:as)
+
+
+
+-- | Parser for a lambda term.  Function application is left associative.
+-- 
+-- @
+--   lambda -\> name
+--   lambda -\> \'(\' lambda \')\'
+--   lambda -\> lambda lambda
+--   lambda -\> \'\\\' {name} \'.\' lambda
+-- @
+
+lambdaParser :: Bindings () String -> Parser (PureLambda () String)
+lambdaParser b = do spaces; e <- appParser b []; spaces; return e
+
+
+
 
 -- | Parser for multiple statements.
 --
@@ -54,6 +73,9 @@ statementsParser b = do spaces; x <- p b; eof; return x
                      return (x:xs))
                  <|> (return [x])
 
+
+
+
 -- | Parser for a statement.
 -- 
 -- @
@@ -69,6 +91,7 @@ statementParser b = do
    return x
 
 
+
 stmtParser :: Bindings () String -> Parser Statement
 stmtParser b =
        try (letDefParser b     >>= return . uncurry Stmt_let)
@@ -76,17 +99,7 @@ stmtParser b =
    <|> (lambdaParser b         >>= return . Stmt_eval)
    <|> (return Stmt_empty)
 
--- | Parser for a lambda term.  Function application is left associative.
--- 
--- @
---   lambda -\> name
---   lambda -\> \'(\' lambda \')\'
---   lambda -\> lambda lambda
---   lambda -\> \'\\\' {name} \'.\' lambda
--- @
 
-lambdaParser :: Bindings () String -> Parser (PureLambda () String)
-lambdaParser b = do spaces; e <- appParser b []; spaces; return e
 
 compParser :: Bindings () String -> Parser (PureLambda () String,PureLambda () String)
 compParser b = do
@@ -97,6 +110,7 @@ compParser b = do
     y <- lambdaParser b
     spaces
     return (x,y)
+
 
 letDefParser :: Bindings () String -> Parser (String,PureLambda () String)
 letDefParser b = do
@@ -109,6 +123,8 @@ letDefParser b = do
     e <- appParser b []
     spaces
     return (n,e)
+
+
 
 -- | Parser a file of definitions.  Each definition takes the form
 --
@@ -126,6 +142,8 @@ definitionFileParser b =
   )
   <|> (eof >> return b)
       
+
+
 definitionParser :: Bindings () String -> Parser (String,PureLambda () String)
 definitionParser b = 
    do n <- nameParser
@@ -136,6 +154,8 @@ definitionParser b =
       spaces
       char ';'
       return (n,e)
+
+
 
 lambdaParser' :: Bindings () String -> [String] -> Parser (PureLambda () String)
 lambdaParser' b labels =
@@ -158,6 +178,8 @@ lambdaParser' b labels =
             Nothing -> if Map.member var b
                          then return (Binding () var)
                          else fail ("variable '"++var++"' not in scope") )
+
+
 
 appParser :: Bindings () String -> [String] -> Parser (PureLambda () String)
 appParser b labels = 
