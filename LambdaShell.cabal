@@ -4,10 +4,12 @@ License:         GPL
 Author:          Robert Dockins
 Synopsis:        Simple shell for evaluating lambda expressions
 Stability:       Alpha
-Build-Depends:   
-    base, haskell98, parsec,
-    ReadlineShell >= 0.1,
-    readline >= 1.0
+Build-Depends:
+    base >= 1.0,
+    haskell98 >= 1.0,
+    parsec >= 1.0,
+    readline >= 1.0,
+    Shellac >= 0.1
 
 Executable:      labmdaShell
 Main-Is:         main.hs
