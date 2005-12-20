@@ -20,3 +20,4 @@ Extensions:
     MultiParamTypeClasses
 Extra-libraries:
     readline
+GHC-Options: -O
