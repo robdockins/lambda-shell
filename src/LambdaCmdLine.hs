@@ -248,7 +248,7 @@ printUsage :: String -> String
 printUsage str = unlines
    [ ""
    , ""
-   , usageInfo "usage: lambda {<option>} [{<file>}]\n" options
+   , usageInfo "usage: lambdaShell {<option>} [{<file>}]\n" options
    , ""
    , ""
    ,str
