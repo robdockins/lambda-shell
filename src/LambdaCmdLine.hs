@@ -73,6 +73,7 @@ data LambdaCmdLineState
      , cmd_print   :: PrintWhat
      , cmd_trace   :: Maybe (Maybe Int)
      , cmd_red     :: RS
+     , cmd_count   :: Bool
      }
 
 initialCmdLineState =
@@ -84,6 +85,7 @@ initialCmdLineState =
   , cmd_print   = PrintNothing
   , cmd_trace   = Nothing
   , cmd_red     = lamReduceNF
+  , cmd_count   = False
   }
 
 data PrintWhat 
@@ -103,6 +105,7 @@ data LambdaCmdLineArgs
   | Trace (Maybe String)
   | Print PrintWhat
   | Reduction String
+  | ShowCount
 
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
@@ -114,6 +117,7 @@ options =
   , Option ['v']     ["version"]     (NoArg (Print PrintVersion))    "print version information"
   , Option ['g']     ["gpl"]         (NoArg (Print PrintGPL))        "print the GNU GPLv2, under which this software is licensed"
   , Option ['w']     ["nowarranty"]  (NoArg (Print PrintNoWarranty)) "print the warranty disclamer"
+  , Option ['c']     ["count"]       (NoArg ShowCount)               "turn on printing of reduction counts"
   , Option ['t']     ["strategy"]    (ReqArg Reduction "REDUCTION_STRATEGY")
            "set the reduction strategy (one of whnf, hnf, nf, strict)"
   ]
@@ -136,6 +140,7 @@ parseCmdLine argv =
         applyFlag :: LambdaCmdLineArgs -> LambdaCmdLineState -> IO LambdaCmdLineState
         applyFlag FullUnfold            st = return st{ cmd_unfold  = True }
         applyFlag ReadStdIn             st = return st{ cmd_stdin   = True }
+        applyFlag ShowCount             st = return st{ cmd_count   = True }
         applyFlag (Print printWhat)     st = return st{ cmd_print   = printWhat }
         applyFlag (Trace Nothing)       st = return st{ cmd_trace   = Just Nothing }
         applyFlag (Trace (Just num))    st = case readDec num of
@@ -167,6 +172,7 @@ mapToShellState st =
   , traceNum    = let x = traceNum initialShellState
                   in maybe x (maybe x id) (cmd_trace st)
   , redStrategy = cmd_red st
+  , showCount   = cmd_count st
   }
 
 runShell :: LambdaCmdLineState -> IO ()

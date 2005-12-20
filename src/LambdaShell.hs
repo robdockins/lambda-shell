@@ -73,6 +73,7 @@ data LambdaShellState =
                              -- ^ All \"let\" bindings currently in scope
   , fullUnfold  :: Bool      -- ^ Should binding names be eagerly unfolded?
   , redStrategy :: RS        -- ^ The reduction strategy currently in use
+  , showCount   :: Bool
   }
 
 -- | Default settings for all elements of shell state.
@@ -83,6 +84,7 @@ initialShellState =
   , letBindings = Map.empty
   , fullUnfold  = False
   , redStrategy = lamReduceWHNF
+  , showCount   = False
   }
 
 
@@ -137,6 +139,7 @@ commands =
   , cmd "version"    printVersion    "Print version info"
   , cmd "load"       loadDefFile     "Load definitions from a file"
   , cmd "clear"      clearBindings   "Clear all let bindings"
+  , cmd "showCount"  toggleShowCount "Toggle the show count mode"
   ]
   
 toggleTrace :: StateCommand LambdaShellState
@@ -150,6 +153,13 @@ toggleUnfold = StateCommand $ \st -> do
    if fullUnfold st
       then putStrLn "full unfold off" >> return st{ fullUnfold = False }
       else putStrLn "full unfold on"  >> return st{ fullUnfold = True }
+
+toggleShowCount :: StateCommand LambdaShellState
+toggleShowCount = StateCommand $ \st -> do
+   if showCount st
+      then putStrLn "show count off"  >> return st{ showCount = False }
+      else putStrLn "show count on"   >> return st{ showCount = True }
+
 
 dumpTrace :: File -> Int -> Completable LetBinding -> StateCommand LambdaShellState
 dumpTrace (File f) steps (Completable termStr) = StateCommand $ \st -> do
@@ -240,11 +250,22 @@ evalExpr :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
 
 evalExpr t st = doEval (unfoldTop (letBindings st) t)
 
- where doEval x = if (trace st)
+ where doEval  x = if trace st
                       then traceEval x st
-                      else (putStrLn (printLam (eval x))) >> return st
+                      else if showCount st
+                              then evalCount x
+                              else eval x
 
-       eval t = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
+       evalCount t = do
+            let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
+	    putStrLn (printLam z)
+            putStrLn $ concat [show n," reductions"]
+            return st
+
+       eval t = do 
+            let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
+            putStrLn (printLam z)
+	    return st
 
 
 

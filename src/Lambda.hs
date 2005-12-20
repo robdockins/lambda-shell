@@ -56,6 +56,7 @@ module Lambda (
 -- * Evaluation Functions
 , lamEvalF
 , lamEval
+, lamEvalCount
 , lamEvalTrace
 
 ) where
@@ -305,6 +306,19 @@ lamEval bind unfold red = eval
         eval x = evalF eval id x
 
 
+
+-------------------------------------------------------------------------------------
+-- | Big-step reduction that counts the number of reductions performed
+
+lamEvalCount :: Bindings a l           -- ^ A set of bindings for unfolding
+             -> Bool                   -- ^ Apply full unfolding ?
+             -> ReductionStrategy a l  -- ^ Reduction strategy to use
+             -> PureLambda a l         -- ^ The term to reduce             
+             -> (PureLambda a l,Integer) -- ^ The evaluated term and reduction count
+
+lamEvalCount bind unfold red term = eval term 0
+  where evalF     = lamEvalF bind unfold red
+        eval x n  = evalF (\t -> eval t (succ n)) (\t -> (t,n)) x
 
 
 -------------------------------------------------------------------------------------
