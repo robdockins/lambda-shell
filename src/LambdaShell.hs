@@ -76,6 +76,7 @@ data LambdaShellState =
   , showCount   :: Bool
   }
 
+
 -- | Default settings for all elements of shell state.
 initialShellState =
   LambdaShellState
@@ -231,11 +232,12 @@ printVersion = SimpleCommand (putStrLn versionInfo)
 ----------------------------------------------------------------
 -- Normal statement evaluation
 
-evaluate :: String -> LambdaShellState -> IO LambdaShellState
+evaluate :: EvaluationFunction LambdaShellState
 evaluate str st = do
   case parse (statementParser (letBindings st)) "" str of
-     Left err   -> putStrLn (show err) >> return st
-     Right stmt -> evalStmt stmt st
+     Left err   -> putStrLn (show err) >> return (Right st)
+     Right stmt -> evalStmt stmt st    >>= return . Right
+
 
 
 evalStmt :: Statement -> LambdaShellState -> IO LambdaShellState
@@ -274,6 +276,7 @@ traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
 traceEval term st = do
   subShell <- traceSubshell term
   runSubshell subShell st
+
 
 
 
