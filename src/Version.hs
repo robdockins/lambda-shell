@@ -1,6 +1,6 @@
 {-
- -   The Lambda Shell, and interactive environment for evaluating pure untyped lambda terms.
- -   Copyright (C) 2005, Robert Dockins
+ -   The Lambda Shell, an interactive environment for evaluating pure untyped lambda terms.
+ -   Copyright (C) 2005-2006, Robert Dockins
  -
  -   This program is free software; you can redistribute it and/or modify
  -   it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ module Version where
 versionInfo :: String
 versionInfo = unlines
   [ ""
-  , "The Lambda Shell, version 0.1"
+  , "The Lambda Shell, version 0.2"
   , "Copyright 2005, Robert Dockins"
   , ""
   ]

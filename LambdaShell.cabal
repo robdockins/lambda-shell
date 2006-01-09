@@ -1,5 +1,5 @@
 Name:            LambdaShell
-Version:         0.1
+Version:         0.2
 License:         GPL
 License-file:    LICENSE
 Author:          Robert Dockins
@@ -10,7 +10,8 @@ Build-Depends:
     haskell98 >= 1.0,
     parsec >= 1.0,
     readline >= 1.0,
-    Shellac >= 0.1
+    Shellac >= 0.2,
+    Shellac-readline >= 0.1
 
 Executable:      labmdaShell
 Main-Is:         main.hs
