@@ -35,8 +35,13 @@ import LambdaParser
 import Version
 
 import qualified Data.Map as Map
-import System.Console.Shell
 import Text.ParserCombinators.Parsec (parse)
+
+import System.Console.Shell
+import System.Console.Shell.Backend.Readline
+--import System.Console.Shell.Backend.Basic
+
+defaultBackend = readlineBackend
 
 type RS = ReductionStrategy () String
 
@@ -99,8 +104,10 @@ initialShellState =
 lambdaShell :: LambdaShellState -> IO LambdaShellState
 lambdaShell init = do
     desc <- mkShellDescription commands evaluate
-    let desc' = desc{ defaultCompletions = Just completeLetBindings }
-    runShell desc' init
+    let desc' = desc{ defaultCompletions = Just completeLetBindings 
+                    , historyFile = Just "lambda.history"
+                    }
+    runShell desc' defaultBackend init
 
 
 
@@ -236,19 +243,19 @@ evaluate :: EvaluationFunction LambdaShellState
 evaluate str st = do
   case parse (statementParser (letBindings st)) "" str of
      Left err   -> putStrLn (show err) >> return (Right st)
-     Right stmt -> evalStmt stmt st    >>= return . Right
+     Right stmt -> evalStmt stmt st
 
 
 
-evalStmt :: Statement -> LambdaShellState -> IO LambdaShellState
+evalStmt :: Statement -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
 evalStmt (Stmt_eval expr) st     = evalExpr expr st
-evalStmt (Stmt_isEq x y) st      = compareExpr x y st
-evalStmt (Stmt_let name expr) st = return st{ letBindings = Map.insert name expr (letBindings st) }
-evalStmt (Stmt_empty) st         = return st
+evalStmt (Stmt_isEq x y) st      = compareExpr x y st >>= return . Right
+evalStmt (Stmt_let name expr) st = return (Right st{ letBindings = Map.insert name expr (letBindings st) })
+evalStmt (Stmt_empty) st         = return (Right st)
 
 
 
-evalExpr :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
+evalExpr :: PureLambda () String -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
 
 evalExpr t st = doEval (unfoldTop (letBindings st) t)
 
@@ -262,22 +269,18 @@ evalExpr t st = doEval (unfoldTop (letBindings st) t)
             let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
 	    putStrLn (printLam z)
             putStrLn $ concat [show n," reductions"]
-            return st
+            return (Right st)
 
        eval t = do 
             let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
             putStrLn (printLam z)
-	    return st
+	    return (Right st)
 
 
-
-traceEval :: PureLambda () String -> LambdaShellState -> IO LambdaShellState
-
+traceEval :: PureLambda () String -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
 traceEval term st = do
   subShell <- traceSubshell term
-  runSubshell subShell st
-
-
+  return (Left (ExecSubshell subShell))
 
 
 compareExpr :: PureLambda () String 
@@ -306,10 +309,11 @@ data TraceShellState
 mkTraceDesc :: IO (ShellDescription TraceShellState)
 mkTraceDesc = do
   desc <- initialShellDescription
-  return desc{ prompt        = "  ]"
-             , commandStyle  = OnlyCommands
-	     , shellCommands = traceShellCommands
-             , beforePrompt  = printTrace
+  return desc{ prompt         = "  ]"
+             , commandStyle   = SingleCharCommands
+	     , shellCommands  = traceShellCommands
+             , beforePrompt   = printTrace
+             , historyEnabled = False
              }
 
 traceShellCommands :: [ShellCommand TraceShellState]
