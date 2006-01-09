@@ -38,8 +38,9 @@ import Text.ParserCombinators.Parsec
 
 import Lambda
 
--- | A type representing either a lambda term to evaluate
---   or a let binding.
+-- | A type representing "statements".  A statement is
+--   either a lambda form to reduce, a let binding,
+--   a confluence test, or the empty statement.
 data Statement
   = Stmt_eval (PureLambda () String)
   | Stmt_let String (PureLambda () String)

@@ -116,9 +116,9 @@ lambdaShell init = do
 
 readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
 readDefinitionFile b file = do
-  str  <- openFile file ReadMode >>= hGetContents
-  let str' = stripComments str
-  case parse (definitionFileParser b) file str' of
+    str  <- openFile file ReadMode >>= hGetContents
+    let str' = stripComments str
+    case parse (definitionFileParser b) file str' of
         Left err -> fail (show err)
         Right b' -> return b'
 
@@ -133,7 +133,7 @@ commands =
   , exitCommand "exit"
   , helpCommand "help"
   , cmd "trace"      toggleTrace     "Toggles the trace mode"
-  , cmd "traceStep"  setTraceStep    "Sets the number of steps shown in trace mode"
+  , cmd "tracestep"  setTraceStep    "Sets the number of steps shown in trace mode"
   , cmd "dumpTrace"  dumpTrace       "Dumps a trace of the named term into a file"
   , cmd "unfold"     toggleUnfold    "Toggles the full unfold mode"
   , cmd "showall"    showBindings    "Shows all let bindings"
@@ -147,7 +147,7 @@ commands =
   , cmd "version"    printVersion    "Print version info"
   , cmd "load"       loadDefFile     "Load definitions from a file"
   , cmd "clear"      clearBindings   "Clear all let bindings"
-  , cmd "showCount"  toggleShowCount "Toggle the show count mode"
+  , cmd "showcount"  toggleShowCount "Toggle the show count mode"
   ]
   
 toggleTrace :: StateCommand LambdaShellState
@@ -271,7 +271,7 @@ evalExpr t st = doEval (unfoldTop (letBindings st) t)
             putStrLn $ concat [show n," reductions"]
             return (Right st)
 
-       eval t = do 
+       eval t = do
             let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
             putStrLn (printLam z)
 	    return (Right st)

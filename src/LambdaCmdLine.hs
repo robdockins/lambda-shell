@@ -126,6 +126,7 @@ options =
 
 -----------------------------------------------------------------
 -- Parser for the command line
+-- yeah, I know its ugly
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
 parseCmdLine argv = 
