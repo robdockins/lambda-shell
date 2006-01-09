@@ -38,6 +38,10 @@ eight = succ seven;
 nine  = succ eight;
 ten   = succ nine;
 
+# integer exponentation
+pow     = \m n. n (\x. mul m x) one;
+
+
 # Turner's combinators
 I = \x .x;
 K = \x y. x;
@@ -50,9 +54,6 @@ Y = \f. (\x. f (x x)) \x. f (x x);
 
 # a divergent labmda term
 omega = (\x. x x) \x. x x;
-
-# integer exponentation
-pow = \m. Y (\powF n. n (\x. mul m x) one);
 
 # factorial
 fac = Y (\facF n. if (iszero n)
