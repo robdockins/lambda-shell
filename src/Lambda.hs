@@ -61,6 +61,7 @@ module Lambda (
 
 ) where
 
+import Data.List
 import qualified Env as Env
 import qualified Data.Map as Map
 import Control.Monad (MonadPlus (..))
@@ -119,7 +120,7 @@ normalEq binds t1 t2 =
 printLam     :: PureLambda a String
              -> String
 
-printLam = showLam Env.empty TopContext
+printLam = showLam Env.empty TopContext 0
 
 
 data LamContext
@@ -131,26 +132,33 @@ data LamContext
 
 showLam      :: Env.Env
              -> LamContext
+             -> Int
              -> PureLambda a String
              -> String
 
-showLam env c (Binding _ name) = name
-showLam env c (Var _ x)        = Env.lookup x env
-showLam env c (App _ t1 t2)    =
+showLam env c x (Binding _ name) = showLambdas env x ++ name
+showLam env c x (Var _ v)        = showLambdas env x ++ Env.lookup v env
+showLam env c x (App _ t1 t2)    = 
    parenIf (c == AppRight) $
-      concat [showLam env AppLeft t1
-             ," "
-             ,showLam env AppRight t2
+      concat [ showLambdas env x
+             , showLam env AppLeft 0 t1
+             , " "
+             , showLam env AppRight 0 t2
              ]
 
-showLam env c (Lam _ label t) =
+showLam env c x (Lam _ label t) =
     let env' = Env.insert label env
-    in parenIf (c /= TopContext) $
-          concat ["\\"
-                 ,Env.lookup 0 env'
-                 ,". "
-                 ,showLam env' TopContext t
-                 ]
+    in parenIf (c /= TopContext) $ 
+       showLam env' TopContext (x+1) t
+
+
+showLambdas :: Env.Env
+            -> Int
+            -> String
+showLambdas env 0 = ""
+showLambdas env x = 
+    "\\"++(concat $ intersperse " " $ map (\i -> Env.lookup i env) $ reverse $ [0..(x-1)] )++". "
+
 
 parenIf :: Bool -> String -> String
 parenIf False x = x
@@ -316,9 +324,9 @@ lamEvalCount :: Bindings a l           -- ^ A set of bindings for unfolding
              -> PureLambda a l         -- ^ The term to reduce             
              -> (PureLambda a l,Integer) -- ^ The evaluated term and reduction count
 
-lamEvalCount bind unfold red term = eval term 0
+lamEvalCount bind unfold red = eval 0
   where evalF     = lamEvalF bind unfold red
-        eval x n  = evalF (\t -> eval t (succ n)) (\t -> (t,n)) x
+        eval n x  = evalF (\t -> eval (succ n) t) (\t -> (t,n)) x
 
 
 -------------------------------------------------------------------------------------
