@@ -63,6 +63,9 @@ not equal
 > :hnf
 using reduction strategy: head normal form
 
+> :showCount 
+show count on
+
 > let l = insertSort (cons two (cons three (cons one nil)))
 
 > index zero l
