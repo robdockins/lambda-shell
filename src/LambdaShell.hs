@@ -134,7 +134,7 @@ commands =
   , helpCommand "help"
   , cmd "trace"      toggleTrace     "Toggles the trace mode"
   , cmd "tracestep"  setTraceStep    "Sets the number of steps shown in trace mode"
-  , cmd "dumpTrace"  dumpTrace       "Dumps a trace of the named term into a file"
+  , cmd "dumptrace"  dumpTrace       "Dumps a trace of the named term into a file"
   , cmd "unfold"     toggleUnfold    "Toggles the full unfold mode"
   , cmd "showall"    showBindings    "Shows all let bindings"
   , cmd "show"       showBinding     "Show a let binding"
@@ -320,6 +320,7 @@ traceShellCommands :: [ShellCommand TraceShellState]
 traceShellCommands =
   [ cmd "p" tracePrev "previous"
   , cmd "n" traceNext "next"
+  , helpCommand "h"
   , exitCommand "q"
   ]
 
