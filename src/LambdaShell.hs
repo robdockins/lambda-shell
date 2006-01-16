@@ -151,26 +151,26 @@ commands =
   ]
   
 toggleTrace :: StateCommand LambdaShellState
-toggleTrace = StateCommand $ \st -> do
+toggleTrace = StateCommand $ \putCmd st -> do
    if trace st 
-      then putStrLn "trace off" >> return st{ trace = False }
-      else putStrLn "trace on"  >> return st{ trace = True }
+      then putCmd "trace off\n" >> return st{ trace = False }
+      else putCmd "trace on\n"  >> return st{ trace = True }
 
 toggleUnfold :: StateCommand LambdaShellState
-toggleUnfold = StateCommand $ \st -> do
+toggleUnfold = StateCommand $ \putCmd st -> do
    if fullUnfold st
-      then putStrLn "full unfold off" >> return st{ fullUnfold = False }
-      else putStrLn "full unfold on"  >> return st{ fullUnfold = True }
+      then putCmd "full unfold off\n" >> return st{ fullUnfold = False }
+      else putCmd "full unfold on\n"  >> return st{ fullUnfold = True }
 
 toggleShowCount :: StateCommand LambdaShellState
-toggleShowCount = StateCommand $ \st -> do
+toggleShowCount = StateCommand $ \putCmd st -> do
    if showCount st
-      then putStrLn "show count off"  >> return st{ showCount = False }
-      else putStrLn "show count on"   >> return st{ showCount = True }
+      then putCmd "show count off\n"  >> return st{ showCount = False }
+      else putCmd "show count on\n"   >> return st{ showCount = True }
 
 
 dumpTrace :: File -> Int -> Completable LetBinding -> StateCommand LambdaShellState
-dumpTrace (File f) steps (Completable termStr) = StateCommand $ \st -> do
+dumpTrace (File f) steps (Completable termStr) = StateCommand $ \putCmd st -> do
 
    case parse (lambdaParser (letBindings st)) "" termStr of
       Left msg   -> putStrLn (show msg)
@@ -184,29 +184,30 @@ dumpTrace (File f) steps (Completable termStr) = StateCommand $ \st -> do
    return st
 
 setTraceStep :: Int -> StateCommand LambdaShellState
-setTraceStep step = StateCommand $ \st -> return st{ traceNum = step }
+setTraceStep step = StateCommand $ \putCmd st -> return st{ traceNum = step }
 
 showBinding :: Completable LetBinding -> StateCommand LambdaShellState
-showBinding (Completable name) = StateCommand $ \st -> do
+showBinding (Completable name) = StateCommand $ \putCmd st -> do
     case Map.lookup name (letBindings st) of
-        Nothing -> putStrLn $ concat ["'",name,"' not bound"]
-        Just t  -> putStrLn $ concat [name," = ",printLam t]
+        Nothing -> putCmd $ concat ["'",name,"' not bound\n"]
+        Just t  -> putCmd $ concat [name," = ",printLam t,"\n"]
     return st
 
 showBindings :: StateCommand LambdaShellState
-showBindings = StateCommand $ \st -> do
-   putStrLn $
+showBindings = StateCommand $ \putCmd st -> do
+   putCmd $
      Map.foldWithKey
        (\name t x -> concat [name," = ",printLam t,"\n",x])
        ""
        (letBindings st)
+   putCmd "\n"
    return st
 
 clearBindings :: StateCommand LambdaShellState
-clearBindings = StateCommand $ \st -> return st{ letBindings = Map.empty }
+clearBindings = StateCommand $ \putCmd st -> return st{ letBindings = Map.empty }
 
 loadDefFile :: File -> StateCommand LambdaShellState
-loadDefFile (File path) = StateCommand $ \st -> do
+loadDefFile (File path) = StateCommand $ \putCmd st -> do
    newBinds <- readDefinitionFile (letBindings st) path
    return st{ letBindings = newBinds }   
 
@@ -223,41 +224,47 @@ setRedStrict :: StateCommand LambdaShellState
 setRedStrict = setRed lamStrictNF "applicative order"
 
 setRed :: RS -> String -> StateCommand LambdaShellState
-setRed strategy name = StateCommand $ \st -> do
-  putStrLn ("using reduction strategy: "++name)
+setRed strategy name = StateCommand $ \putCmd st -> do
+  putCmd $ concat ["using reduction strategy: ",name,"\n"]
   return st{ redStrategy = strategy }
 
 printNoWarranty :: SimpleCommand LambdaShellState
-printNoWarranty = SimpleCommand (putStr noWarranty)
+printNoWarranty = SimpleCommand $ \putCmd -> putCmd noWarranty
 
 printGPL :: SimpleCommand LambdaShellState
-printGPL = SimpleCommand (putStrLn gpl)
+printGPL = SimpleCommand $ \putCmd -> putCmd gpl
 
 printVersion :: SimpleCommand LambdaShellState
-printVersion = SimpleCommand (putStrLn versionInfo)
+printVersion = SimpleCommand $ \putCmd -> putCmd versionInfo
 
 ----------------------------------------------------------------
 -- Normal statement evaluation
 
 evaluate :: EvaluationFunction LambdaShellState
-evaluate str st = do
+evaluate putCmd str st = do
   case parse (statementParser (letBindings st)) "" str of
-     Left err   -> putStrLn (show err) >> return (Right st)
-     Right stmt -> evalStmt stmt st
+     Left err   -> putCmd (show err++"\n") >> return (st,Nothing)
+     Right stmt -> evalStmt putCmd stmt st
 
 
 
-evalStmt :: Statement -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
-evalStmt (Stmt_eval expr) st     = evalExpr expr st
-evalStmt (Stmt_isEq x y) st      = compareExpr x y st >>= return . Right
-evalStmt (Stmt_let name expr) st = return (Right st{ letBindings = Map.insert name expr (letBindings st) })
-evalStmt (Stmt_empty) st         = return (Right st)
+evalStmt :: OutputCommand 
+         -> Statement
+         -> LambdaShellState
+         -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
+
+evalStmt putCmd (Stmt_eval expr) st     = evalExpr putCmd expr st
+evalStmt putCmd (Stmt_isEq x y) st      = compareExpr putCmd x y st >>= \st' -> return (st',Nothing)
+evalStmt putCmd (Stmt_let name expr) st = return (st{ letBindings = Map.insert name expr (letBindings st) },Nothing)
+evalStmt putCmd (Stmt_empty) st         = return (st,Nothing)
 
 
+evalExpr :: OutputCommand 
+         -> PureLambda () String
+         -> LambdaShellState
+         -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
 
-evalExpr :: PureLambda () String -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
-
-evalExpr t st = doEval (unfoldTop (letBindings st) t)
+evalExpr putCmd t st = doEval (unfoldTop (letBindings st) t)
 
  where doEval  x = if trace st
                       then traceEval x st
@@ -267,31 +274,35 @@ evalExpr t st = doEval (unfoldTop (letBindings st) t)
 
        evalCount t = do
             let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
-	    putStrLn (printLam z)
-            putStrLn $ concat [show n," reductions"]
-            return (Right st)
+	    putCmd $ printLam z ++ "\n"
+            putCmd $ concat ["<<",show n," reductions>>\n"]
+            return (st,Nothing)
 
        eval t = do
             let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
             putStrLn (printLam z)
-	    return (Right st)
+	    return (st,Nothing)
 
 
-traceEval :: PureLambda () String -> LambdaShellState -> IO (Either (ShellSpecial LambdaShellState) LambdaShellState)
+traceEval :: PureLambda () String
+          -> LambdaShellState
+          -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
+
 traceEval term st = do
   subShell <- traceSubshell term
-  return (Left (ExecSubshell subShell))
+  return (st,Just (ExecSubshell subShell))
 
 
-compareExpr :: PureLambda () String 
+compareExpr :: OutputCommand
+            -> PureLambda () String 
             -> PureLambda () String
 	    -> LambdaShellState 
 	    -> IO LambdaShellState
 
-compareExpr x y st = do
+compareExpr putCmd x y st = do
      if normalEq (letBindings st) x y
-        then putStrLn "equal"
-        else putStrLn "not equal"
+        then putCmd "equal\n"
+        else putCmd "not equal\n"
      return st
 
 
@@ -324,18 +335,18 @@ traceShellCommands =
   , exitCommand "q"
   ]
 
-printTrace :: TraceShellState -> IO ()
-printTrace st = do
-  putStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
+printTrace :: OutputCommand -> TraceShellState -> IO ()
+printTrace putCmd st = do
+  putCmd $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
 	take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
 
 tracePrev :: StateCommand TraceShellState
-tracePrev = StateCommand $ \st -> do
+tracePrev = StateCommand $ \_ st -> do
   let x = max 0 (tracePos st - traceStep st)
-  return st{ tracePos = x}
+  return st{ tracePos = x }
 
 traceNext :: StateCommand TraceShellState
-traceNext = StateCommand $ \st -> do
+traceNext = StateCommand $ \_ st -> do
   let x = tracePos st + traceStep st
   if null (drop (tracePos st) (traceList st))
      then return st
