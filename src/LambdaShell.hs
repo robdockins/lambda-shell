@@ -317,7 +317,7 @@ data TraceShellState
 mkTraceDesc :: IO (ShellDescription TraceShellState)
 mkTraceDesc = do
   desc <- initialShellDescription
-  return desc{ prompt         = "  ]"
+  return desc{ prompt         = \_ -> return "  ]"
              , commandStyle   = SingleCharCommands
 	     , shellCommands  = traceShellCommands
              , beforePrompt   = printTrace
