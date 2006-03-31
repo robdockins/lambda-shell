@@ -43,11 +43,14 @@ module Lambda (
 
 -- * Auxilary Functions
 , lookupBinding
+, lookupBindingM
 , printLam
 , lamSubst
+, lamShift
 , unfoldTop
 
 -- * Reduction Strategies
+, lamReduceNull
 , lamReduceWHNF
 , lamReduceHNF
 , lamReduceNF
@@ -65,10 +68,18 @@ import Data.List
 import qualified Env as Env
 import qualified Data.Map as Map
 import Control.Monad (MonadPlus (..))
+import Control.Monad.Identity
 
 type Bindings a l = Map.Map String (PureLambda a l)
-lookupBinding name b = Map.findWithDefault (error $ concat ["'",name,"' not bound"]) name b
 
+lookupBinding :: String -> Bindings a l -> PureLambda a l
+lookupBinding name b  = runIdentity (lookupBindingM name b)
+
+lookupBindingM :: Monad m => String -> Bindings a l -> m (PureLambda a l)
+lookupBindingM name b =
+   case Map.lookup name b of
+      Just x  -> return x
+      Nothing -> fail (concat ["'",name,"' not bound"])
 
 
 ----------------------------------------------------------------
@@ -220,6 +231,10 @@ type ReductionStrategy a l
     -> Maybe (PureLambda a l)
 
 
+-------------------------------------------------------------------------------------
+-- | The \'null\' reduction strategy, which does no reduction
+lamReduceNull :: ReductionStrategy a l
+lamReduceNull _ _ _ = Nothing
 
 -------------------------------------------------------------------------------------
 -- | Single-step normal order reduction to Weak Head Normal Form (WHNF)

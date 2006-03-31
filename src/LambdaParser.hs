@@ -29,6 +29,8 @@ module LambdaParser
 , Statement (..)
 , statementParser
 , statementsParser
+, LamParseState (..)
+, LamParser
 )
 where
 
@@ -37,10 +39,13 @@ import qualified Data.Map as Map
 import Text.ParserCombinators.Parsec
 
 import Lambda
+import CPS
 
 -- | A type representing "statements".  A statement is
 --   either a lambda form to reduce, a let binding,
---   a confluence test, or the empty statement.
+--   a confluence test, a cps transform,
+--   or the empty statement.
+
 data Statement
   = Stmt_eval (PureLambda () String)
   | Stmt_let String (PureLambda () String)
@@ -48,17 +53,21 @@ data Statement
               (PureLambda () String)
   | Stmt_empty
 
+data LamParseState
+   = LamParseState
+   { cpsTransform   :: CPS
+   , extendedSyntax :: Bool
+   }
 
+type LamParser a = GenParser Char LamParseState a
 
 -- | Parser for an identifier.  An identifier is
 --   a letter followed by zero or more alphanumeric characters (or underscores).
-nameParser :: Parser String
+nameParser :: LamParser String
 nameParser = 
   do a  <- letter
      as <- many (char '_' <|> alphaNum)
      return (a:as)
-
-
 
 -- | Parser for a lambda term.  Function application is left associative.
 -- 
@@ -69,10 +78,14 @@ nameParser =
 --   lambda -\> \'\\\' {name} \'.\' lambda
 -- @
 
-lambdaParser :: Bindings () String -> Parser (PureLambda () String)
-lambdaParser b = do spaces; e <- appParser b []; spaces; return e
-
-
+lambdaParser :: Bindings () String -> LamParser (PureLambda () String)
+lambdaParser b = do
+    st <- getState
+    let p = if (extendedSyntax st) then extSyntax else basicSyntax
+    spaces
+    e <- appParser p b []
+    spaces
+    return e
 
 
 -- | Parser for multiple statements.
@@ -81,7 +94,7 @@ lambdaParser b = do spaces; e <- appParser b []; spaces; return e
 --   stmts -\> stmt ';' stmts
 --   stmts -\>
 -- @
-statementsParser :: Bindings () String -> Parser [Statement]
+statementsParser :: Bindings () String -> LamParser [Statement]
 statementsParser b = do spaces; x <- p b; eof; return x
 
  where p b = do x <- stmtParser b
@@ -104,7 +117,7 @@ statementsParser b = do spaces; x <- p b; eof; return x
 --    stmt -\> \'let\' name \'=\' lambda
 --    stmt -\> lambda
 -- @
-statementParser :: Bindings () String -> Parser Statement
+statementParser :: Bindings () String -> LamParser Statement
 statementParser b = do
    spaces
    x <- stmtParser b
@@ -114,16 +127,14 @@ statementParser b = do
 
 
 
-stmtParser :: Bindings () String -> Parser Statement
+stmtParser :: Bindings () String -> LamParser Statement
 stmtParser b =
        try (letDefParser b     >>= return . uncurry Stmt_let)
    <|> try (compParser b       >>= return . uncurry Stmt_isEq)
    <|> (lambdaParser b         >>= return . Stmt_eval)
    <|> (return Stmt_empty)
 
-
-
-compParser :: Bindings () String -> Parser (PureLambda () String,PureLambda () String)
+compParser :: Bindings () String -> LamParser (PureLambda () String,PureLambda () String)
 compParser b = do
     x <- lambdaParser b
     spaces
@@ -134,16 +145,14 @@ compParser b = do
     return (x,y)
 
 
-letDefParser :: Bindings () String -> Parser (String,PureLambda () String)
+letDefParser :: Bindings () String -> LamParser (String,PureLambda () String)
 letDefParser b = do
     string "let"
     many1 space
     n <- nameParser
     spaces
     char '='
-    spaces
-    e <- appParser b []
-    spaces
+    e <- lambdaParser b
     return (n,e)
 
 stripComments :: String -> String
@@ -158,7 +167,7 @@ stripComments [] = []
 --  def -\> \'let\' name \'=\' lambda \';\'
 -- @
 
-definitionFileParser :: Bindings () String -> Parser (Bindings () String)
+definitionFileParser :: Bindings () String -> LamParser (Bindings () String)
 definitionFileParser b = 
   (do spaces
       (n,t) <- definitionParser b
@@ -170,44 +179,75 @@ definitionFileParser b =
       
 
 
-definitionParser :: Bindings () String -> Parser (String,PureLambda () String)
+definitionParser :: Bindings () String -> LamParser (String,PureLambda () String)
 definitionParser b = 
    do n <- nameParser
       spaces
       char '='
-      spaces
-      e <- appParser b []
-      spaces
+      e <- lambdaParser b
       char ';'
       return (n,e)
 
+type P = Bindings () String -> [String] -> LamParser (PureLambda () String)
 
 
-lambdaParser' :: Bindings () String -> [String] -> Parser (PureLambda () String)
-lambdaParser' b labels =
-     (do char '('; spaces; e <- appParser b labels; spaces; char ')'; return e)
+cpsParser :: P -> P
+cpsParser p b l = do
+    string "[["
+    spaces
+    x <- (appParser p) b l
+    spaces
+    string "]]"
+    st <- getState
+    cpsTransform st b x
 
- <|> (do char '\\'
-         spaces
-         vars <- sepEndBy1 nameParser spaces
-         char '.'
-         spaces
-         let labels' = foldr (:) labels (reverse vars)
-         exp <- appParser b labels'
-         let expr = foldr (Lam ()) exp vars
-         return expr)
+parensParser :: P -> P
+parensParser p b l = do
+    char '('
+    spaces
+    e <- (appParser p) b l
+    spaces
+    char ')'
+    return e
 
- <|> (do var <- nameParser
-         let i = elemIndex var labels
-         case i of
-            Just i  -> return (Var () i)
-            Nothing -> if Map.member var b
-                         then return (Binding () var)
-                         else fail ("variable '"++var++"' not in scope") )
+varParser :: P
+varParser b labels = do
+    var <- nameParser
+    let i = elemIndex var labels
+    case i of
+       Just i  -> return (Var () i)
+       Nothing -> if Map.member var b
+                     then return (Binding () var)
+                     else fail ("variable '"++var++"' not in scope")
 
 
+absParser :: P -> P
+absParser p b labels = do
+    char '\\'
+    spaces
+    vars <- sepEndBy1 nameParser spaces
+    char '.'
+    spaces
+    let labels' = foldr (:) labels (reverse vars)
+    exp <- (appParser p) b labels'
+    let expr = foldr (Lam ()) exp vars
+    return expr
 
-appParser :: Bindings () String -> [String] -> Parser (PureLambda () String)
-appParser b labels = 
-   do exprs <- sepEndBy1 (lambdaParser' b labels) (many1 space)
-      return (foldl1 (App ()) exprs)
+
+appParser :: P -> P
+appParser p b l = do
+    exprs <- sepEndBy1 (p b l) (many1 space)
+    return (foldl1 (App ()) exprs)
+
+basicSyntax :: P
+basicSyntax b l =
+    parensParser basicSyntax b l <|>
+    absParser    basicSyntax b l <|>
+    varParser b l
+    
+extSyntax :: P
+extSyntax b l =
+    parensParser extSyntax b l <|>
+    absParser    extSyntax b l <|>
+    cpsParser    extSyntax b l <|>
+    varParser b l

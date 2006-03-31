@@ -31,9 +31,10 @@ import qualified Data.Map as Map
 import System.IO
 import System.Exit
 import System.Console.GetOpt
-import Text.ParserCombinators.Parsec (parse)
+import Text.ParserCombinators.Parsec (runParser)
 
 import Lambda
+import CPS
 import LambdaParser
 import LambdaShell
 import Version
@@ -74,6 +75,8 @@ data LambdaCmdLineState
      , cmd_trace   :: Maybe (Maybe Int)
      , cmd_red     :: RS
      , cmd_count   :: Bool
+     , cmd_extsyn  :: Bool
+     , cmd_cps     :: CPS
      }
 
 initialCmdLineState =
@@ -86,6 +89,8 @@ initialCmdLineState =
   , cmd_trace   = Nothing
   , cmd_red     = lamReduceNF
   , cmd_count   = False
+  , cmd_extsyn  = True
+  , cmd_cps     = simple_cps
   }
 
 data PrintWhat 
@@ -105,7 +110,9 @@ data LambdaCmdLineArgs
   | Trace (Maybe String)
   | Print PrintWhat
   | Reduction String
+  | Cps String
   | ShowCount
+  | NoExtSyn
 
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
@@ -118,8 +125,12 @@ options =
   , Option ['g']     ["gpl"]         (NoArg (Print PrintGPL))        "print the GNU GPLv2, under which this software is licensed"
   , Option ['w']     ["nowarranty"]  (NoArg (Print PrintNoWarranty)) "print the warranty disclamer"
   , Option ['c']     ["count"]       (NoArg ShowCount)               "turn on printing of reduction counts"
+  , Option ['x']     ["extsyn"]      (NoArg NoExtSyn)                "turn off extended syntax"
   , Option ['t']     ["strategy"]    (ReqArg Reduction "REDUCTION_STRATEGY")
-           "set the reduction strategy (one of whnf, hnf, nf, strict)"
+           "set the reduction strategy (one of 'whnf', 'hnf', 'nf', 'strict')"
+  , Option ['p']     ["cps"]         (ReqArg Cps "CPS_STRATEGY")
+           "set the CPS strategy (one of 'simple', 'onepass')"
+
   ]
 
 
@@ -142,6 +153,7 @@ parseCmdLine argv =
         applyFlag FullUnfold            st = return st{ cmd_unfold  = True }
         applyFlag ReadStdIn             st = return st{ cmd_stdin   = True }
         applyFlag ShowCount             st = return st{ cmd_count   = True }
+        applyFlag NoExtSyn              st = return st{ cmd_extsyn  = False }
         applyFlag (Print printWhat)     st = return st{ cmd_print   = printWhat }
         applyFlag (Trace Nothing)       st = return st{ cmd_trace   = Just Nothing }
         applyFlag (Trace (Just num))    st = case readDec num of
@@ -151,6 +163,12 @@ parseCmdLine argv =
         applyFlag (Program pgm)         st = case cmd_input st of
                                                 Nothing -> return st{ cmd_input = Just pgm }
                                                 _       -> fail (errMsg ["'-e' option may only occur once"])
+
+        applyFlag (Cps str) st =
+            case map toLower str of
+                "simple"  -> return st{ cmd_cps = simple_cps }
+                "onepass" -> return st{ cmd_cps = onepass_cps }
+                _         -> fail (concat ["'",str,"' is not a valid CPS strategy"])
 
         applyFlag (Reduction str) st =
             case map toLower str of
@@ -194,7 +212,8 @@ evalStdin st = hGetContents stdin >>= evalInput st
 evalInput :: LambdaCmdLineState -> String -> IO ()
 evalInput st expr = do
     exitCode <- newIORef ExitSuccess
-    case parse (statementsParser (cmd_binds st)) "" expr of
+    let parseSt = LamParseState (cmd_cps st) (cmd_extsyn st)
+    case runParser (statementsParser (cmd_binds st)) parseSt "" expr of
        Left msg    -> fail (show msg)
        Right stmts -> foldl (>>=) (return st) $ map (flip (evalStmt exitCode)) $ stmts
     code <- readIORef exitCode
@@ -244,7 +263,8 @@ compareTerms ec st t1 t2 = do
 
 loadDefs :: FilePath -> LambdaCmdLineState -> IO LambdaCmdLineState
 loadDefs path st = do
-  binds <- readDefinitionFile (cmd_binds st) path
+  let parseSt = LamParseState (cmd_cps st) (cmd_extsyn st)
+  binds <- readDefinitionFile parseSt (cmd_binds st) path
   return st{ cmd_binds = Map.union binds (cmd_binds st) }
 
 

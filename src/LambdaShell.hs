@@ -32,10 +32,11 @@ import Data.List (isPrefixOf)
 
 import Lambda
 import LambdaParser
+import CPS
 import Version
 
 import qualified Data.Map as Map
-import Text.ParserCombinators.Parsec (parse)
+import Text.ParserCombinators.Parsec (runParser)
 
 import System.Console.Shell
 import System.Console.Shell.Backend.Readline
@@ -78,7 +79,9 @@ data LambdaShellState =
                              -- ^ All \"let\" bindings currently in scope
   , fullUnfold  :: Bool      -- ^ Should binding names be eagerly unfolded?
   , redStrategy :: RS        -- ^ The reduction strategy currently in use
-  , showCount   :: Bool
+  , showCount   :: Bool      -- ^ If true, show the number of reductions at each step
+  , cpsStrategy :: CPS       -- ^ The current CPS strategy
+  , extSyntax   :: Bool      -- ^ Is extended syntax enabled?
   }
 
 
@@ -91,9 +94,9 @@ initialShellState =
   , fullUnfold  = False
   , redStrategy = lamReduceWHNF
   , showCount   = False
+  , cpsStrategy = simple_cps
+  , extSyntax   = True
   }
-
-
 
 -----------------------------------------------------------------
 -- Main entry point to the shell
@@ -114,11 +117,14 @@ lambdaShell init = do
 -----------------------------------------------------------------
 -- read definitions from a file
 
-readDefinitionFile :: Bindings () String -> String -> IO (Bindings () String)
-readDefinitionFile b file = do
+readDefinitionFile :: LamParseState
+                   -> Bindings () String
+                   -> String
+                   -> IO (Bindings () String)
+readDefinitionFile parseSt b file = do
     str  <- openFile file ReadMode >>= hGetContents
     let str' = stripComments str
-    case parse (definitionFileParser b) file str' of
+    case runParser (definitionFileParser b) parseSt file str' of
         Left err -> fail (show err)
         Right b' -> return b'
 
@@ -141,6 +147,7 @@ commands =
   , cmd "whnf"       setRedWHNF      "Set reduction strategy to weak head normal form"
   , cmd "hnf"        setRedHNF       "Set reduction strategy to head normal form"
   , cmd "nf"         setRedNF        "Set reduction strategy to normal form"
+  , cmd "null"       setRedNull      "Set the null reduction strategy (no reduction)"
   , cmd "strict"     setRedStrict    "Use applicative order (strict) reduction"
   , cmd "nowarranty" printNoWarranty "Print the warranty disclaimer"
   , cmd "gpl"        printGPL        "Print the GNU GPLv2, under which this software is licensed"
@@ -148,6 +155,9 @@ commands =
   , cmd "load"       loadDefFile     "Load definitions from a file"
   , cmd "clear"      clearBindings   "Clear all let bindings"
   , cmd "showcount"  toggleShowCount "Toggle the show count mode"
+  , cmd "simple_cps" setCPSSimple    "Use the simple CPS strategy"
+  , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
+  , cmd "extsyn"     toggleExtSyn    "Toggles extended syntax"
   ]
   
 toggleTrace :: StateCommand LambdaShellState
@@ -168,11 +178,16 @@ toggleShowCount = StateCommand $ \outCmd st -> do
       then shellPutInfoLn outCmd "show count off"  >> return st{ showCount = False }
       else shellPutInfoLn outCmd "show count on"   >> return st{ showCount = True }
 
+toggleExtSyn :: StateCommand LambdaShellState
+toggleExtSyn = StateCommand $ \outCmd st -> do
+   if extSyntax st
+      then shellPutInfoLn outCmd "extended syntax off" >> return st{ extSyntax = False }
+      else shellPutInfoLn outCmd "extended syntax on"  >> return st{ extSyntax = True }
 
 dumpTrace :: File -> Int -> Completable LetBinding -> StateCommand LambdaShellState
 dumpTrace (File f) steps (Completable termStr) = StateCommand $ \outCmd st -> do
-
-   case parse (lambdaParser (letBindings st)) "" termStr of
+   let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
+   case runParser (lambdaParser (letBindings st)) parseSt "" termStr of
       Left msg   -> shellPutErrLn outCmd (show msg)
       Right term -> do
          let trace = lamEvalTrace (letBindings st) (fullUnfold st) 
@@ -207,7 +222,8 @@ clearBindings = StateCommand $ \outCmd st -> return st{ letBindings = Map.empty 
 
 loadDefFile :: File -> StateCommand LambdaShellState
 loadDefFile (File path) = StateCommand $ \outCmd st -> do
-   newBinds <- readDefinitionFile (letBindings st) path
+   let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
+   newBinds <- readDefinitionFile parseSt (letBindings st) path
    return st{ letBindings = newBinds }   
 
 setRedWHNF :: StateCommand LambdaShellState
@@ -222,10 +238,25 @@ setRedNF = setRed lamReduceNF "normal form"
 setRedStrict :: StateCommand LambdaShellState
 setRedStrict = setRed lamStrictNF "applicative order"
 
+setRedNull :: StateCommand LambdaShellState
+setRedNull = setRed lamReduceNull "no reduction"
+
 setRed :: RS -> String -> StateCommand LambdaShellState
 setRed strategy name = StateCommand $ \outCmd st -> do
   shellPutInfoLn outCmd $ concat ["using reduction strategy: ",name]
   return st{ redStrategy = strategy }
+
+setCPSSimple :: StateCommand LambdaShellState
+setCPSSimple = setCPS simple_cps "simple"
+
+setCPSOnepass :: StateCommand LambdaShellState
+setCPSOnepass = setCPS onepass_cps "onepass"
+
+setCPS :: CPS -> String -> StateCommand LambdaShellState
+setCPS cps name = StateCommand $ \outCmd st -> do
+  shellPutInfoLn outCmd $ concat ["using CPS stragety: ",name]
+  return st{ cpsStrategy = cps }
+
 
 printNoWarranty :: SimpleCommand LambdaShellState
 printNoWarranty = SimpleCommand $ \outCmd -> shellPutInfo outCmd noWarranty
@@ -241,7 +272,8 @@ printVersion = SimpleCommand $ \outCmd -> shellPutInfo outCmd versionInfo
 
 evaluate :: EvaluationFunction LambdaShellState
 evaluate outCmd str st = do
-  case parse (statementParser (letBindings st)) "" str of
+  let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
+  case runParser (statementParser (letBindings st)) parseSt "" str of
      Left err   -> shellPutErrLn outCmd (show err) >> return (st,Nothing)
      Right stmt -> evalStmt outCmd stmt st
 

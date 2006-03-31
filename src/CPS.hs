@@ -23,6 +23,7 @@
 
 module CPS
 ( simple_cps
+, eta_cps
 , onepass_cps
 , CPS
 ) where
@@ -65,31 +66,72 @@ do_simple_cps b (App _ t1 t2) = do
              App () (App () (Var () 1) (Var () 0)) (Var () 2))
 
 
+-- | A version of Plotkin's CPS transform with additional
+--   eta expansions, preparing for the one-pass 
+--   simplifying transform
+eta_cps :: CPS
+eta_cps b t = do
+   x <- do_eta_cps b t
+   return (App () x (Lam () "q" (Var () 0)))
+
+do_eta_cps :: CPS
+
+do_eta_cps b (Binding _ name) =
+    lookupBindingM name b >>= \t -> do_simple_cps b t
+
+do_eta_cps b (Var _ i) =
+    return (Lam () "k" $ App () (Var () 0) $ (Var () (i+1)))
+
+
+do_eta_cps b (Lam _ l t) = do
+    t' <- do_eta_cps b (lamShift 2 1 (lamShift 0 1 t))
+    return
+      (Lam () "k" $ App () (Var () 0) $
+        Lam () l $
+          Lam () "kk" $ App () t' $
+            Lam () "m" $ App () (Var () 1) (Var () 0)
+      )
+
+
+do_eta_cps b (App _ t1 t2) = do
+    t1' <- do_eta_cps b (lamShift 0 1 t1)
+    t2' <- do_eta_cps b (lamShift 0 2 t2)
+    return
+      (Lam () "k" $ App () t1' $
+        Lam () "m" $ App () t2' $
+          Lam () "n" $
+            App () (App () (Var () 1) (Var () 0)) $
+              Lam () "a" $ App () (Var () 3) (Var () 0)
+      )
+
+
+
 -- | one-pass simplifying CPS, due to Danvy and Filinski
 onepass_cps :: CPS
-onepass_cps b t = do_onepass_cps b t return
+onepass_cps b t = return (do_onepass_cps b t id)
 
 do_onepass_cps
-    :: Monad m
-    => Bindings () String
+    :: Bindings () String
     -> PureLambda () String
-    -> (PureLambda () String -> m (PureLambda () String))
-    -> m (PureLambda () String)
+    -> (PureLambda () String -> PureLambda () String)
+    -> PureLambda () String
 
 do_onepass_cps b (Binding _ name) k =
-   lookupBindingM name b >>= \t -> do_onepass_cps b t k
+   do_onepass_cps b (lookupBinding name b) k
 
 do_onepass_cps b t@(Var _ i) k = k t
 
 do_onepass_cps b (Lam _ l t) k =
-   do_onepass_cps b (lamShift 0 1 t) (\m -> do
-     k (Lam () l $ Lam () "k" (App () (Var () 0) m)) )
+   k (Lam () l $
+       Lam () "k" $
+         do_onepass_cps b (lamShift 0 1 t)
+           (\m -> App () (Var () 0) m)
+     )
 
 do_onepass_cps b (App _ t1 t2) k =
-   do_onepass_cps b t1 (\m -> do_onepass_cps b t2 (\n -> do
-     z <- k (Var () (-1))
-     return 
-       (App () (App () m n) (Lam () "a" (lamShift 0 1 z))) ))
+   do_onepass_cps b t1 (\m ->
+	do_onepass_cps b t2 (\n ->
+	    App () (App () m n) (Lam () "a" (k (Var () 0))) ))
 
 {-
 do_onepass_cps
@@ -105,7 +147,7 @@ do_onepass_cps b (Binding _ name) k =
 do_onepass_cps b t@(Var _ i) k = k t
 
 do_onepass_cps b (Lam _ l t) k = do
-   t' <- do_onepass_cps_tail b t (Var () 0) 
+   t' <- do_onepass_cps_tail b (lamShift (lamShift 0 1 t) (Var () 0)
    k (Lam () l $ Lam () "k" t')
    
 do_onepass_cps b (App _ t1 t2) k =
