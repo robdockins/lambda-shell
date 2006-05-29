@@ -24,7 +24,7 @@
 module CPS
 ( simple_cps
 , eta_cps
-, onepass_cps
+-- , onepass_cps
 , CPS
 ) where
 
@@ -67,7 +67,7 @@ do_simple_cps b (App _ t1 t2) = do
 
 
 -- | A version of Plotkin's CPS transform with additional
---   eta expansions, preparing for the one-pass 
+--   eta expansions, preparing for the one-pass
 --   simplifying transform
 eta_cps :: CPS
 eta_cps b t = do
@@ -106,6 +106,10 @@ do_eta_cps b (App _ t1 t2) = do
 
 
 
+
+{- I can't figure out how to make this work,
+   so it's commented out for now
+
 -- | one-pass simplifying CPS, due to Danvy and Filinski
 onepass_cps :: CPS
 onepass_cps b t = return (do_onepass_cps b t id)
@@ -133,7 +137,9 @@ do_onepass_cps b (App _ t1 t2) k =
 	do_onepass_cps b t2 (\n ->
 	    App () (App () m n) (Lam () "a" (k (Var () 0))) ))
 
-{-
+
+
+
 do_onepass_cps
     :: Monad m
     => Bindings () String

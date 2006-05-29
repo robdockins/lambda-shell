@@ -27,6 +27,7 @@ module LambdaShell
 )
 where
 
+import Control.Monad.Trans
 import System.IO
 import Data.List (isPrefixOf)
 
@@ -39,6 +40,7 @@ import qualified Data.Map as Map
 import Text.ParserCombinators.Parsec (runParser)
 
 import System.Console.Shell
+import System.Console.Shell.ShellMonad
 import System.Console.Shell.Backend.Readline
 --import System.Console.Shell.Backend.Basic
 
@@ -52,10 +54,7 @@ type RS = ReductionStrategy () String
 
 completeLetBindings :: LambdaShellState -> String -> IO [String]
 completeLetBindings st prefix =
-    return 
-    $ filter (prefix `isPrefixOf`)
-    $ Map.keys
-    $ letBindings st
+    return . filter (prefix `isPrefixOf`) . Map.keys . letBindings $ st
 
 data LetBinding = LetBinding
 
@@ -82,6 +81,7 @@ data LambdaShellState =
   , showCount   :: Bool      -- ^ If true, show the number of reductions at each step
   , cpsStrategy :: CPS       -- ^ The current CPS strategy
   , extSyntax   :: Bool      -- ^ Is extended syntax enabled?
+  , histFile    :: Maybe String -- ^ A file for command history
   }
 
 
@@ -96,6 +96,7 @@ initialShellState =
   , showCount   = False
   , cpsStrategy = simple_cps
   , extSyntax   = True
+  , histFile    = Nothing
   }
 
 -----------------------------------------------------------------
@@ -106,11 +107,13 @@ initialShellState =
 --   possibly modified, state.
 lambdaShell :: LambdaShellState -> IO LambdaShellState
 lambdaShell init = do
-    desc <- mkShellDescription commands evaluate
-    let desc' = desc{ defaultCompletions = Just completeLetBindings 
-                    , historyFile = Just "lambda.history"
-                    }
-    runShell desc' defaultBackend init
+    let
+      desc = 
+         (mkShellDescription commands evaluate)
+         { defaultCompletions = Just completeLetBindings
+         , historyFile        = histFile init
+         }
+    runShell desc defaultBackend init
 
 
 
@@ -138,202 +141,146 @@ commands =
   [ exitCommand "quit"
   , exitCommand "exit"
   , helpCommand "help"
-  , cmd "trace"      toggleTrace     "Toggles the trace mode"
-  , cmd "tracestep"  setTraceStep    "Sets the number of steps shown in trace mode"
-  , cmd "dumptrace"  dumpTrace       "Dumps a trace of the named term into a file"
-  , cmd "unfold"     toggleUnfold    "Toggles the full unfold mode"
-  , cmd "showall"    showBindings    "Shows all let bindings"
+  , toggle "trace"     "Toggle the trace mode"      trace      (\x st -> st { trace = x })
+  , toggle "unfold"    "Toggle the unfold mode"     fullUnfold (\x st -> st { fullUnfold = x })
+  , toggle "showcount" "Toggle the show count mode" showCount  (\x st -> st { showCount = x })
+  , toggle "extsyn"    "Toggle extended syntax"     extSyntax  (\x st -> st { extSyntax = x })
+
+  , cmd "tracestep"  setTraceStep    "Set the number of steps shown in trace mode"
+  , cmd "dumptrace"  dumpTrace       "Dump a trace of the named term into a file"
+  , cmd "showall"    showBindings    "Show all let bindings"
   , cmd "show"       showBinding     "Show a let binding"
   , cmd "whnf"       setRedWHNF      "Set reduction strategy to weak head normal form"
   , cmd "hnf"        setRedHNF       "Set reduction strategy to head normal form"
   , cmd "nf"         setRedNF        "Set reduction strategy to normal form"
   , cmd "null"       setRedNull      "Set the null reduction strategy (no reduction)"
   , cmd "strict"     setRedStrict    "Use applicative order (strict) reduction"
-  , cmd "nowarranty" printNoWarranty "Print the warranty disclaimer"
-  , cmd "gpl"        printGPL        "Print the GNU GPLv2, under which this software is licensed"
-  , cmd "version"    printVersion    "Print version info"
   , cmd "load"       loadDefFile     "Load definitions from a file"
   , cmd "clear"      clearBindings   "Clear all let bindings"
-  , cmd "showcount"  toggleShowCount "Toggle the show count mode"
+
+  , cmd "nowarranty" (shellPutInfo noWarranty)  "Print the warranty disclaimer"
+  , cmd "gpl"        (shellPutInfo gpl)         "Print the GNU GPLv2, under which this software is licensed"
+  , cmd "version"    (shellPutInfo versionInfo) "Print version info"
+
+
+{-
   , cmd "simple_cps" setCPSSimple    "Use the simple CPS strategy"
   , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
-  , cmd "extsyn"     toggleExtSyn    "Toggles extended syntax"
+-}
   ]
   
-toggleTrace :: StateCommand LambdaShellState
-toggleTrace = StateCommand $ \outCmd st -> do
-   if trace st 
-      then shellPutInfoLn outCmd "trace off" >> return st{ trace = False }
-      else shellPutInfoLn outCmd "trace on"  >> return st{ trace = True }
 
-toggleUnfold :: StateCommand LambdaShellState
-toggleUnfold = StateCommand $ \outCmd st -> do
-   if fullUnfold st
-      then shellPutInfoLn outCmd "full unfold off" >> return st{ fullUnfold = False }
-      else shellPutInfoLn outCmd "full unfold on"  >> return st{ fullUnfold = True }
-
-toggleShowCount :: StateCommand LambdaShellState
-toggleShowCount = StateCommand $ \outCmd st -> do
-   if showCount st
-      then shellPutInfoLn outCmd "show count off"  >> return st{ showCount = False }
-      else shellPutInfoLn outCmd "show count on"   >> return st{ showCount = True }
-
-toggleExtSyn :: StateCommand LambdaShellState
-toggleExtSyn = StateCommand $ \outCmd st -> do
-   if extSyntax st
-      then shellPutInfoLn outCmd "extended syntax off" >> return st{ extSyntax = False }
-      else shellPutInfoLn outCmd "extended syntax on"  >> return st{ extSyntax = True }
-
-dumpTrace :: File -> Int -> Completable LetBinding -> StateCommand LambdaShellState
-dumpTrace (File f) steps (Completable termStr) = StateCommand $ \outCmd st -> do
+dumpTrace :: File -> Int -> Completable LetBinding -> Sh LambdaShellState ()
+dumpTrace (File f) steps (Completable termStr) = do
+   st <- getShellSt
    let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
    case runParser (lambdaParser (letBindings st)) parseSt "" termStr of
-      Left msg   -> shellPutErrLn outCmd (show msg)
+      Left msg   -> shellPutErrLn (show msg)
       Right term -> do
          let trace = lamEvalTrace (letBindings st) (fullUnfold st) 
                                   (redStrategy st)
                                   (unfoldTop (letBindings st) term)
-         h <- openFile f WriteMode
-         hPutStr h $ unlines $ map printLam $ take steps $ trace
-         hClose h
-   return st
+         liftIO (writeFile f (unlines . map printLam . take steps $ trace))
 
-setTraceStep :: Int -> StateCommand LambdaShellState
-setTraceStep step = StateCommand $ \outCmd st -> return st{ traceNum = step }
 
-showBinding :: Completable LetBinding -> StateCommand LambdaShellState
-showBinding (Completable name) = StateCommand $ \outCmd st -> do
+setTraceStep :: Int -> Sh LambdaShellState ()
+setTraceStep step = getShellSt >>= \st -> putShellSt st{ traceNum = step }
+
+showBinding :: Completable LetBinding -> Sh LambdaShellState ()
+showBinding (Completable name) = do
+    st <- getShellSt
     case Map.lookup name (letBindings st) of
-        Nothing -> shellPutErrLn  outCmd $ concat ["'",name,"' not bound"]
-        Just t  -> shellPutInfoLn outCmd $ concat [name," = ",printLam t]
-    return st
+        Nothing -> shellPutErrLn  $ concat ["'",name,"' not bound"]
+        Just t  -> shellPutInfoLn $ concat [name," = ",printLam t]
 
-showBindings :: StateCommand LambdaShellState
-showBindings = StateCommand $ \outCmd st -> do
-   shellPutStrLn outCmd $
+showBindings :: Sh LambdaShellState ()
+showBindings = do
+   st <- getShellSt
+   shellPutStrLn $
      Map.foldWithKey
        (\name t x -> concat [name," = ",printLam t,"\n",x])
        ""
        (letBindings st)
-   return st
 
-clearBindings :: StateCommand LambdaShellState
-clearBindings = StateCommand $ \outCmd st -> return st{ letBindings = Map.empty }
+clearBindings :: Sh LambdaShellState ()
+clearBindings = modifyShellSt (\st -> st{ letBindings = Map.empty })
 
-loadDefFile :: File -> StateCommand LambdaShellState
-loadDefFile (File path) = StateCommand $ \outCmd st -> do
+loadDefFile :: File -> Sh LambdaShellState ()
+loadDefFile (File path) = do
+   st <- getShellSt
    let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
-   newBinds <- readDefinitionFile parseSt (letBindings st) path
-   return st{ letBindings = newBinds }   
+   newBinds <- liftIO (readDefinitionFile parseSt (letBindings st) path)
+   putShellSt st{ letBindings = newBinds }
 
-setRedWHNF :: StateCommand LambdaShellState
+
+setRedWHNF :: Sh LambdaShellState ()
 setRedWHNF = setRed lamReduceWHNF "weak head normal form"
 
-setRedHNF :: StateCommand LambdaShellState
+setRedHNF :: Sh LambdaShellState ()
 setRedHNF = setRed lamReduceHNF "head normal form"
 
-setRedNF :: StateCommand LambdaShellState
+setRedNF :: Sh LambdaShellState ()
 setRedNF = setRed lamReduceNF "normal form"
 
-setRedStrict :: StateCommand LambdaShellState
+setRedStrict :: Sh LambdaShellState ()
 setRedStrict = setRed lamStrictNF "applicative order"
 
-setRedNull :: StateCommand LambdaShellState
+setRedNull :: Sh LambdaShellState ()
 setRedNull = setRed lamReduceNull "no reduction"
 
-setRed :: RS -> String -> StateCommand LambdaShellState
-setRed strategy name = StateCommand $ \outCmd st -> do
-  shellPutInfoLn outCmd $ concat ["using reduction strategy: ",name]
-  return st{ redStrategy = strategy }
-
-setCPSSimple :: StateCommand LambdaShellState
-setCPSSimple = setCPS simple_cps "simple"
-
-setCPSOnepass :: StateCommand LambdaShellState
-setCPSOnepass = setCPS onepass_cps "onepass"
-
-setCPS :: CPS -> String -> StateCommand LambdaShellState
-setCPS cps name = StateCommand $ \outCmd st -> do
-  shellPutInfoLn outCmd $ concat ["using CPS stragety: ",name]
-  return st{ cpsStrategy = cps }
-
-
-printNoWarranty :: SimpleCommand LambdaShellState
-printNoWarranty = SimpleCommand $ \outCmd -> shellPutInfo outCmd noWarranty
-
-printGPL :: SimpleCommand LambdaShellState
-printGPL = SimpleCommand $ \outCmd -> shellPutInfo outCmd gpl
-
-printVersion :: SimpleCommand LambdaShellState
-printVersion = SimpleCommand $ \outCmd -> shellPutInfo outCmd versionInfo
+setRed :: RS -> String -> Sh LambdaShellState ()
+setRed strategy name = do
+   shellPutInfoLn $ concat ["using reduction strategy: ",name]
+   modifyShellSt (\st -> st{ redStrategy = strategy })
 
 ----------------------------------------------------------------
 -- Normal statement evaluation
 
-evaluate :: EvaluationFunction LambdaShellState
-evaluate outCmd str st = do
+evaluate :: String -> Sh LambdaShellState ()
+evaluate str = do
+  st <- getShellSt
   let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
   case runParser (statementParser (letBindings st)) parseSt "" str of
-     Left err   -> shellPutErrLn outCmd (show err) >> return (st,Nothing)
-     Right stmt -> evalStmt outCmd stmt st
+     Left err   -> shellPutErrLn (show err)
+     Right stmt ->
+       case stmt of
+         Stmt_eval expr      -> evalExpr expr
+         Stmt_isEq x y       -> compareExpr x y
+         Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm expr (letBindings st) })
+         Stmt_empty          -> return ()
 
-evalStmt :: OutputCommand 
-         -> Statement
-         -> LambdaShellState
-         -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
+evalExpr :: PureLambda () String -> Sh LambdaShellState ()
+evalExpr t = getShellSt >>= \st -> doEval (unfoldTop (letBindings st) t) st
 
-evalStmt outCmd (Stmt_eval expr) st     = evalExpr outCmd expr st
-evalStmt outCmd (Stmt_isEq x y) st      = compareExpr outCmd x y st >>= \st' -> return (st',Nothing)
-evalStmt outCmd (Stmt_let name expr) st = return (st{ letBindings = Map.insert name expr (letBindings st) },Nothing)
-evalStmt outCmd (Stmt_empty) st         = return (st,Nothing)
+ where
+   doEval x st
+    | trace st     = traceEval x
+    | showCount st = evalCount x st
+    | otherwise    = eval x st
 
+   traceEval x = do
+      subshell <- liftIO (traceSubshell x)
+      shellSpecial (ExecSubshell subshell)
 
-evalExpr :: OutputCommand 
-         -> PureLambda () String
-         -> LambdaShellState
-         -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
+   evalCount t st = do
+      let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
+      shellPutStrLn $ printLam z
+      shellPutStrLn $ concat ["<<",show n," reductions>>"]
 
-evalExpr outCmd t st = doEval (unfoldTop (letBindings st) t)
-
- where doEval  x = if trace st
-                      then traceEval x st
-                      else if showCount st
-                              then evalCount x
-                              else eval x
-
-       evalCount t = do
-            let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
-	    shellPutStrLn outCmd $ printLam z
-            shellPutStrLn outCmd $ concat ["<<",show n," reductions>>"]
-            return (st,Nothing)
-
-       eval t = do
-            let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
-            shellPutStrLn outCmd (printLam z)
-	    return (st,Nothing)
+   eval t st = do
+      let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
+      shellPutStrLn $ printLam z
 
 
-traceEval :: PureLambda () String
-          -> LambdaShellState
-          -> IO (LambdaShellState,Maybe (ShellSpecial LambdaShellState))
-
-traceEval term st = do
-  subShell <- traceSubshell term
-  return (st,Just (ExecSubshell subShell))
-
-
-compareExpr :: OutputCommand
-            -> PureLambda () String 
+compareExpr :: PureLambda () String 
             -> PureLambda () String
-	    -> LambdaShellState 
-	    -> IO LambdaShellState
+	    -> Sh LambdaShellState ()
 
-compareExpr outCmd x y st = do
-     if normalEq (letBindings st) x y
-        then shellPutStrLn outCmd "equal"
-        else shellPutStrLn outCmd "not equal"
-     return st
-
+compareExpr x y = do
+    st <- getShellSt
+    if normalEq (letBindings st) x y
+        then shellPutInfoLn "equal"
+        else shellPutInfoLn "not equal"
 
 
 ----------------------------------------------------------------
@@ -346,50 +293,53 @@ data TraceShellState
      , traceList :: [PureLambda () String]
      }
 
-mkTraceDesc :: IO (ShellDescription TraceShellState)
-mkTraceDesc = do
-  desc <- initialShellDescription
-  return desc{ prompt         = \_ -> return "  ]"
-             , commandStyle   = SingleCharCommands
-	     , shellCommands  = traceShellCommands
-             , beforePrompt   = printTrace
-             , historyEnabled = False
-             }
+mkTraceDesc :: ShellDescription TraceShellState
+mkTraceDesc =
+  initialShellDescription
+      { prompt         = \_ -> return "  ]"
+      , commandStyle   = SingleCharCommands
+      , shellCommands  = traceShellCommands
+      , beforePrompt   = printTrace
+      , historyEnabled = False
+      }
 
 traceShellCommands :: [ShellCommand TraceShellState]
 traceShellCommands =
   [ cmd "p" tracePrev "previous"
   , cmd "n" traceNext "next"
   , helpCommand "h"
+  , helpCommand "?"
   , exitCommand "q"
   ]
 
-printTrace :: OutputCommand -> TraceShellState -> IO ()
-printTrace outCmd st = do
-  shellPutStr outCmd $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
+printTrace :: Sh TraceShellState ()
+printTrace = do
+  st <- getShellSt
+  shellPutStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
 	take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
 
-tracePrev :: StateCommand TraceShellState
-tracePrev = StateCommand $ \_ st -> do
-  let x = max 0 (tracePos st - traceStep st)
-  return st{ tracePos = x }
+tracePrev :: Sh TraceShellState ()
+tracePrev = do
+  modifyShellSt $ \st ->
+      let x = max 0 (tracePos st - traceStep st) in
+      st{ tracePos = x }
 
-traceNext :: StateCommand TraceShellState
-traceNext = StateCommand $ \_ st -> do
+traceNext :: Sh TraceShellState ()
+traceNext = do
+  st <- getShellSt
   let x = tracePos st + traceStep st
   if null (drop (tracePos st) (traceList st))
-     then return st
-     else return st{ tracePos = x }
+     then return ()
+     else putShellSt st{ tracePos = x }
 
 mkTraceState :: PureLambda () String -> LambdaShellState -> IO TraceShellState
 mkTraceState term st =
    return TraceShellState
-          { tracePos = 0
+          { tracePos  = 0
           , traceStep = traceNum st
           , traceList = lamEvalTrace (letBindings st) (fullUnfold st) (redStrategy st) term
           }
 
 traceSubshell :: PureLambda () String -> IO (Subshell LambdaShellState TraceShellState)
-traceSubshell term = do
-  desc <- mkTraceDesc
-  simpleSubshell (mkTraceState term) desc
+traceSubshell term = 
+   simpleSubshell (mkTraceState term) mkTraceDesc

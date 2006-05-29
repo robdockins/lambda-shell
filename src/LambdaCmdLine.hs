@@ -53,6 +53,7 @@ lambdaCmdLine argv =
          PrintNoWarranty -> putStr noWarranty
          PrintGPL        -> putStr gpl
 
+
 doCmdLine :: LambdaCmdLineState -> IO ()
 doCmdLine st =
    case (cmd_input st) of
@@ -77,6 +78,7 @@ data LambdaCmdLineState
      , cmd_count   :: Bool
      , cmd_extsyn  :: Bool
      , cmd_cps     :: CPS
+     , cmd_history :: Maybe String
      }
 
 initialCmdLineState =
@@ -91,6 +93,7 @@ initialCmdLineState =
   , cmd_count   = False
   , cmd_extsyn  = True
   , cmd_cps     = simple_cps
+  , cmd_history = Just "lambda.history"
   }
 
 data PrintWhat 
@@ -113,6 +116,8 @@ data LambdaCmdLineArgs
   | Cps String
   | ShowCount
   | NoExtSyn
+  | History String
+  | NoHistory
 
 options :: [OptDescr LambdaCmdLineArgs]
 options = 
@@ -128,8 +133,11 @@ options =
   , Option ['x']     ["extsyn"]      (NoArg NoExtSyn)                "turn off extended syntax"
   , Option ['t']     ["strategy"]    (ReqArg Reduction "REDUCTION_STRATEGY")
            "set the reduction strategy (one of 'whnf', 'hnf', 'nf', 'strict')"
-  , Option ['p']     ["cps"]         (ReqArg Cps "CPS_STRATEGY")
-           "set the CPS strategy (one of 'simple', 'onepass')"
+  , Option ['w']     ["history"]     (ReqArg History "HISTORY_FILE")  "set the command history file (default: 'lambda.history')"
+  , Option ['q']     ["nohistory"]   (NoArg NoHistory)                "disable command history file"
+
+--  , Option ['p']     ["cps"]         (ReqArg Cps "CPS_STRATEGY")
+--           "set the CPS strategy (one of 'simple', 'onepass')"
 
   ]
 
@@ -154,6 +162,8 @@ parseCmdLine argv =
         applyFlag ReadStdIn             st = return st{ cmd_stdin   = True }
         applyFlag ShowCount             st = return st{ cmd_count   = True }
         applyFlag NoExtSyn              st = return st{ cmd_extsyn  = False }
+        applyFlag NoHistory             st = return st{ cmd_history = Nothing }
+        applyFlag (History nm)          st = return st{ cmd_history = Just nm }
         applyFlag (Print printWhat)     st = return st{ cmd_print   = printWhat }
         applyFlag (Trace Nothing)       st = return st{ cmd_trace   = Just Nothing }
         applyFlag (Trace (Just num))    st = case readDec num of
@@ -164,11 +174,14 @@ parseCmdLine argv =
                                                 Nothing -> return st{ cmd_input = Just pgm }
                                                 _       -> fail (errMsg ["'-e' option may only occur once"])
 
+        applyFlag (Cps str) st = error "should't have to parse CPS"
+{-
         applyFlag (Cps str) st =
             case map toLower str of
                 "simple"  -> return st{ cmd_cps = simple_cps }
                 "onepass" -> return st{ cmd_cps = onepass_cps }
                 _         -> fail (concat ["'",str,"' is not a valid CPS strategy"])
+-}
 
         applyFlag (Reduction str) st =
             case map toLower str of
@@ -192,6 +205,8 @@ mapToShellState st =
                   in maybe x (maybe x id) (cmd_trace st)
   , redStrategy = cmd_red st
   , showCount   = cmd_count st
+  , cpsStrategy = cmd_cps st
+  , histFile    = cmd_history st
   }
 
 runShell :: LambdaCmdLineState -> IO ()
@@ -234,7 +249,7 @@ evalStmt ec st (Stmt_empty)      = setSucc ec >> return st
 
 evalTerm :: LambdaCmdLineState -> PureLambda () String -> IO ()
 evalTerm st t = doEval (unfoldTop (cmd_binds st) t)
- where doEval t = 
+ where doEval t =
          case cmd_trace st of
             Nothing       -> putStrLn (printLam (eval t))
             Just Nothing  -> printTrace 50 t
@@ -247,7 +262,7 @@ evalTerm st t = doEval (unfoldTop (cmd_binds st) t)
 
 
 compareTerms :: IORef ExitCode
-            -> LambdaCmdLineState 
+            -> LambdaCmdLineState
             -> PureLambda () String
             -> PureLambda () String
             -> IO ()

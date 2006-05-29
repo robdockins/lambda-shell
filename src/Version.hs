@@ -23,7 +23,7 @@ module Version where
 versionInfo :: String
 versionInfo = unlines
   [ ""
-  , "The Lambda Shell, version 0.2"
+  , "The Lambda Shell, version 0.3"
   , "Copyright 2005-2006, Robert Dockins"
   , ""
   ]

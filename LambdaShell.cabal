@@ -9,6 +9,7 @@ Build-Depends:
     base >= 1.0,
     haskell98 >= 1.0,
     parsec >= 1.0,
+    mtl >= 1.0,
     readline >= 1.0,
     Shellac >= 0.2,
     Shellac-readline >= 0.1
