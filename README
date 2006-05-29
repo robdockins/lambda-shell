@@ -21,15 +21,17 @@ Features:
      terms, when evaluated to normal form, are alpha equivalant)
   -- programs can be entered from the command line (using the -e option)
      or piped into stdin (using the -s option)
+  -- perform Continuation Passing Style (CPS) transforms on terms before
+     evaluation using the syntax  '[[ five ]]'
 
 
 An example session:
 -------------------------------
 
-$ labmdaShell
+$ lambdaShell
 
-The Lambda Shell, version 0.1
-Copyright 2005, Robert Dockins
+The Lambda Shell, version 0.3
+Copyright 2005-2006, Robert Dockins
 
 
 The Lambda Shell comes with ABSOLUTELY NO WARRANTY; for details
@@ -37,52 +39,41 @@ type ':nowarranty'.  This is free software, and you are welcome to
 redistribute it under certain conditions; type ':gpl'
 for details
 
-
 > (\x y. x) (\a. a) (\b. b)
 \a. a
-
 > :load prelude.lam
-
 > :show four
 four = succ three
-
 > four
-\f. \x. f (f (f (f x)))
-
+\f x. f (f (f (f x)))
 > mul two three
-\f. \x. f (f (f (f (f (f x)))))
-
+\f x. f (f (f (f (f (f x)))))
 > let x = plus six two
-
 > x == eight
 equal
-
 > x == nine
 not equal
-
-> :hnf
-using reduction strategy: head normal form
-
-> :showCount 
-show count on
-
+> one
+\f x. f x
+> [[ one ]]
+\f k. k (\x k_0. f x k_0)
+> :showcount
+showcount on
+> sub seven two
+\f x. f (f (f (f (f x))))
+<<90 reductions>>
 > let l = insertSort (cons two (cons three (cons one nil)))
-
 > index zero l
 one
-463 reductions
-
+<<463 reductions>>
 > index one l
 two
-2135 reductions
-
+<<2135 reductions>>
 > index two l
 three
-5720 reductions
-
+<<5720 reductions>>
 > :quit
 
-$
 
 -----------------------------------------------
 
