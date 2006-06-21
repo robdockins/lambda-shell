@@ -131,7 +131,7 @@ normalEq binds t1 t2 =
 printLam     :: PureLambda a String
              -> String
 
-printLam = showLam Env.empty TopContext 0
+printLam lam = showLam Env.empty TopContext 0 lam []
 
 
 data LamContext
@@ -145,35 +145,38 @@ showLam      :: Env.Env
              -> LamContext
              -> Int
              -> PureLambda a String
-             -> String
+             -> ShowS
 
-showLam env c x (Binding _ name) = showLambdas env x ++ name
-showLam env c x (Var _ v)        = showLambdas env x ++ Env.lookup v env
-showLam env c x (App _ t1 t2)    = 
-   parenIf (c == AppRight) $
-      concat [ showLambdas env x
-             , showLam env AppLeft 0 t1
-             , " "
-             , showLam env AppRight 0 t2
-             ]
+showLam env c x lam = case lam of
 
-showLam env c x (Lam _ label t) =
-    let env' = Env.insert label env
-    in parenIf (c /= TopContext) $ 
-       showLam env' TopContext (x+1) t
+  Binding _ name -> showLambdas env x . showString name
+
+  Var _ v        -> showLambdas env x . showString (Env.lookup v env)
+
+  Lam _ label t  ->
+       showParen (c /= TopContext)
+       ( showLam (Env.insert label env) TopContext (x+1) t )
+
+  App _ t1 t2    ->
+       showParen (c == AppRight)
+       ( showLambdas env x
+       . showLam env AppLeft 0 t1
+       . showChar ' '
+       . showLam env AppRight 0 t2
+       )
 
 
 showLambdas :: Env.Env
             -> Int
-            -> String
-showLambdas env 0 = ""
+            -> ShowS
+
+showLambdas env 0 = id
 showLambdas env x = 
-    "\\"++(concat $ intersperse " " $ map (\i -> Env.lookup i env) $ reverse $ [0..(x-1)] )++". "
-
-
-parenIf :: Bool -> String -> String
-parenIf False x = x
-parenIf True  x = "("++x++")"
+    ( showChar '\\'
+    . showString
+          (concat . intersperse " " . map (\i -> Env.lookup i env) . reverse $ [0..(x-1)] )
+    . showString ". "
+    )
 
 
 -----------------------------------------------------------------------------
