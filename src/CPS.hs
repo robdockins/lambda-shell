@@ -24,7 +24,7 @@
 module CPS
 ( simple_cps
 , eta_cps
--- , onepass_cps
+, onepass_cps
 , CPS
 ) where
 
@@ -107,78 +107,93 @@ do_eta_cps b (App _ t1 t2) = do
 
 
 
-{- I can't figure out how to make this work,
-   so it's commented out for now
+-- | The \"one-pass\" properly-tail-recursive CPS tranform due to Danvy and Filinski,
+--   from the paper \"Representing Control: A Study of the CPS Transformation\",
+--   in /Mathematical Structures in Computer Science/, 1991.
+--
+--   Here is is actually implemented as a two-pass tranform.
+--   In the first pass we create the eta-expanded version and note
+--   which redexes are adminstrative.  In the second pass all administrative
+--   redexes are reduced, leaving only the dynamic redexes.
 
--- | one-pass simplifying CPS, due to Danvy and Filinski
 onepass_cps :: CPS
-onepass_cps b t = return (do_onepass_cps b t id)
-
-do_onepass_cps
-    :: Bindings () String
-    -> PureLambda () String
-    -> (PureLambda () String -> PureLambda () String)
-    -> PureLambda () String
-
-do_onepass_cps b (Binding _ name) k =
-   do_onepass_cps b (lookupBinding name b) k
-
-do_onepass_cps b t@(Var _ i) k = k t
-
-do_onepass_cps b (Lam _ l t) k =
-   k (Lam () l $
-       Lam () "k" $
-         do_onepass_cps b (lamShift 0 1 t)
-           (\m -> App () (Var () 0) m)
-     )
-
-do_onepass_cps b (App _ t1 t2) k =
-   do_onepass_cps b t1 (\m ->
-	do_onepass_cps b t2 (\n ->
-	    App () (App () m n) (Lam () "a" (k (Var () 0))) ))
+onepass_cps b t = do
+   x <- do_onepass_cps b t
+   simplify_onepass (App True x (Lam True "q" (Var True 0)))
 
 
-
-
-do_onepass_cps
+simplify_onepass 
     :: Monad m
-    => Bindings () String
-    -> PureLambda () String
-    -> (PureLambda () String -> m (PureLambda () String))
+    => PureLambda Bool String
     -> m (PureLambda () String)
 
-do_onepass_cps b (Binding _ name) k =
-   lookupBindingM name b >>= \t -> do_onepass_cps b t k
+simplify_onepass (Binding _ _) = fail "bug: binding found in simplify_onepass"
 
-do_onepass_cps b t@(Var _ i) k = k t
+simplify_onepass (Var False i)     = return (Var () i)
+simplify_onepass (Lam False l t)   = simplify_onepass t >>= \t' -> return (Lam () l t')
+simplify_onepass (App False t1 t2) = do
+    t1' <- simplify_onepass t1
+    t2' <- simplify_onepass t2
+    return (App () t1' t2')
 
-do_onepass_cps b (Lam _ l t) k = do
-   t' <- do_onepass_cps_tail b (lamShift (lamShift 0 1 t) (Var () 0)
-   k (Lam () l $ Lam () "k" t')
-   
-do_onepass_cps b (App _ t1 t2) k =
-   do_onepass_cps b t1 (\m -> do_onepass_cps b t2 (\n -> do
-       z <- k (Var () 0)
-       return (App () (App () m n) (Lam () "a" z)) ))
+simplify_onepass (App True (Lam True _ t) s) = simplify_onepass (lamSubst s t)
+simplify_onepass t  = fail $ "bug: found unexpected administrative terms in simplify_onepass\n"++(show t)
+
+
+do_onepass_cps
+    :: Monad m 
+    => Bindings () String
+    -> PureLambda () String
+    -> m (PureLambda Bool String)
+
+do_onepass_cps b (Binding _ name) =
+     lookupBindingM name b >>= \t -> do_onepass_cps b t
+
+do_onepass_cps b (Var _ i) =
+     return (Lam True "k" $ App True (Var True 0) $ (Var False (i+1)))
+
+do_onepass_cps b (Lam _ l t) = do
+    t' <- do_onepass_cps_tail b (lamShift 2 1 (lamShift 0 1 t))
+    return
+       (Lam True "k0" $ App True (Var True 0) $
+          Lam False l $ Lam False "k" $ App True t' $ (Var False 0)
+       )
+
+do_onepass_cps b (App _ t1 t2) = do
+    t1' <- do_onepass_cps b (lamShift 0 1 t1)
+    t2' <- do_onepass_cps b (lamShift 0 2 t2)
+    return 
+        (Lam True "k0" $ App True t1' $
+           Lam True "m0" $ App True t2' $
+             Lam True "n" $
+               App False (App False (Var True 1) (Var True 0)) $
+                 Lam False "a" $ App True (Var True 3) (Var False 0)
+        )
+
 
 do_onepass_cps_tail
-    :: Monad m
+    :: Monad m 
     => Bindings () String
     -> PureLambda () String
-    -> PureLambda () String
-    -> m (PureLambda () String)
+    -> m (PureLambda Bool String)
 
-do_onepass_cps_tail b (Binding _ name) k =
-   lookupBindingM name b >>= \t -> do_onepass_cps_tail b t k
+do_onepass_cps_tail b (Var _ i) =
+    return (Lam True "k0" (App False (Var True 0) (Var False (i+1))))
 
-do_onepass_cps_tail b t@(Var _ _) k = return (App () k t)
+do_onepass_cps_tail b (Lam _ l t) = do
+    t' <- do_onepass_cps_tail b (lamShift 2 1 (lamShift 0 1 t))
+    return
+      (Lam True "k0" $ App False (Var True 0) $
+         Lam False l $ Lam False "k" $ App True t' $ (Var False 0)
+      )
 
-do_onepass_cps_tail b (Lam _ l t) k = do
-   t' <- do_onepass_cps_tail b (lamShift 0 1 t) (Var () 0) 
-   return (App () k $ Lam () l $ Lam () "k" t')
-
-do_onepass_cps_tail b (App _ t1 t2) k =
-   do_onepass_cps b t1 (\m -> do_onepass_cps b t2 (\n -> 
-      return (App () (App () m n) k)))
-
--}
+do_onepass_cps_tail b (App _ t1 t2) = do
+    t1' <- do_onepass_cps b (lamShift 0 1 t1)
+    t2' <- do_onepass_cps b (lamShift 0 2 t2)
+    return
+      (Lam True "k0" $ App True t1' $
+         Lam True "m" $ App True t2' $
+           Lam True "n" $
+             App False (App False (Var True 1) (Var True 0)) 
+               (Var True 2)
+      )

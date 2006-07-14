@@ -161,12 +161,8 @@ commands =
   , cmd "nowarranty" (shellPutInfo noWarranty)  "Print the warranty disclaimer"
   , cmd "gpl"        (shellPutInfo gpl)         "Print the GNU GPLv2, under which this software is licensed"
   , cmd "version"    (shellPutInfo versionInfo) "Print version info"
-
-
-{-
-  , cmd "simple_cps" setCPSSimple    "Use the simple CPS strategy"
+  , cmd "simple_cps"  setCPSSimple   "Use the simple CPS strategy"
   , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
--}
   ]
   
 
@@ -232,6 +228,17 @@ setRed :: RS -> String -> Sh LambdaShellState ()
 setRed strategy name = do
    shellPutInfoLn $ concat ["using reduction strategy: ",name]
    modifyShellSt (\st -> st{ redStrategy = strategy })
+
+setCPSSimple :: Sh LambdaShellState ()
+setCPSSimple = setCPS simple_cps "simple"
+
+setCPSOnepass :: Sh LambdaShellState ()
+setCPSOnepass = setCPS onepass_cps "onepass"
+
+setCPS :: CPS -> String -> Sh LambdaShellState ()
+setCPS cps name = do
+   shellPutInfoLn $ concat ["unsing CPS strategy: ",name]
+   modifyShellSt (\st -> st{ cpsStrategy = cps })
 
 ----------------------------------------------------------------
 -- Normal statement evaluation

@@ -136,8 +136,8 @@ options =
   , Option ['w']     ["history"]     (ReqArg History "HISTORY_FILE")  "set the command history file (default: 'lambda.history')"
   , Option ['q']     ["nohistory"]   (NoArg NoHistory)                "disable command history file"
 
---  , Option ['p']     ["cps"]         (ReqArg Cps "CPS_STRATEGY")
---           "set the CPS strategy (one of 'simple', 'onepass')"
+  , Option ['p']     ["cps"]         (ReqArg Cps "CPS_STRATEGY")
+           "set the CPS strategy (one of 'simple', 'onepass')"
 
   ]
 
@@ -174,14 +174,11 @@ parseCmdLine argv =
                                                 Nothing -> return st{ cmd_input = Just pgm }
                                                 _       -> fail (errMsg ["'-e' option may only occur once"])
 
-        applyFlag (Cps str) st = error "should't have to parse CPS"
-{-
         applyFlag (Cps str) st =
             case map toLower str of
                 "simple"  -> return st{ cmd_cps = simple_cps }
                 "onepass" -> return st{ cmd_cps = onepass_cps }
                 _         -> fail (concat ["'",str,"' is not a valid CPS strategy"])
--}
 
         applyFlag (Reduction str) st =
             case map toLower str of
