@@ -45,6 +45,7 @@ module Lambda (
 , lookupBinding
 , lookupBindingM
 , printLam
+, showLam
 , lamSubst
 , lamShift
 , unfoldTop
@@ -128,10 +129,11 @@ normalEq binds t1 t2 =
 -- | Show a lambda term, minimizing parenthises and disambiguating
 --   variables in nested scopes with identical labels.
 
-printLam     :: PureLambda a String
-             -> String
+printLam :: PureLambda a String -> String
+printLam lam = showLam lam []
 
-printLam lam = showLam Env.empty TopContext 0 lam []
+showLam :: PureLambda a String -> ShowS
+showLam = showLam_ Env.empty TopContext 0
 
 
 data LamContext
@@ -141,13 +143,13 @@ data LamContext
  deriving (Eq)
 
 
-showLam      :: Env.Env
+showLam_     :: Env.Env
              -> LamContext
              -> Int
              -> PureLambda a String
              -> ShowS
 
-showLam env c x lam = case lam of
+showLam_ env c x lam = case lam of
 
   Binding _ name -> showLambdas env x . showString name
 
@@ -155,14 +157,14 @@ showLam env c x lam = case lam of
 
   Lam _ label t  ->
        showParen (c /= TopContext)
-       ( showLam (Env.insert label env) TopContext (x+1) t )
+       ( showLam_ (Env.insert label env) TopContext (x+1) t )
 
   App _ t1 t2    ->
        showParen (c == AppRight)
        ( showLambdas env x
-       . showLam env AppLeft 0 t1
+       . showLam_ env AppLeft 0 t1
        . showChar ' '
-       . showLam env AppRight 0 t2
+       . showLam_ env AppRight 0 t2
        )
 
 
@@ -171,10 +173,10 @@ showLambdas :: Env.Env
             -> ShowS
 
 showLambdas env 0 = id
-showLambdas env x = 
+showLambdas env x =
     ( showChar '\\'
     . showString
-          (concat . intersperse " " . map (\i -> Env.lookup i env) . reverse $ [0..(x-1)] )
+          (concat . intersperse " " . map (\i -> Env.lookup i env) $ [x-1, x-2 .. 0])
     . showString ". "
     )
 
