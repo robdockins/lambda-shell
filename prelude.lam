@@ -48,6 +48,7 @@ K = \x y. x;
 S = \f g x. (f x) (g x);
 W = \f x. f x x;
 B = \f g x. f (g x);
+C = \f x y. f x y;
 
 # the fixpoint combinator
 Y = \f. (\x. f (x x)) \x. f (x x);
