@@ -20,10 +20,13 @@
 
 module Version where
 
+import Data.Version
+import Paths_LambdaShell (version)
+
 versionInfo :: String
 versionInfo = unlines
   [ ""
-  , "The Lambda Shell, version 0.3"
+  , "The Lambda Shell, version "++(showVersion version)
   , "Copyright 2005-2006, Robert Dockins"
   , ""
   ]
