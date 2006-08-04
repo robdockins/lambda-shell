@@ -120,7 +120,7 @@ normalEq     :: Bindings a l    -- ^ Let bindings in scope
              -> PureLambda a l
              -> Bool
 
-normalEq binds t1 t2 = 
+normalEq binds t1 t2 =
     let n1 = lamEval binds True lamReduceNF t1
         n2 = lamEval binds True lamReduceNF t2
     in alphaEq n1 n2
@@ -326,7 +326,7 @@ lamEvalF b unfold reduce f z x =
 lamEval     :: Bindings a l            -- ^ A set of bindings for unfolding
              -> Bool                   -- ^ Apply full unfolding ?
              -> ReductionStrategy a l  -- ^ Reduction strategy to use
-             -> PureLambda a l         -- ^ The term to reduce             
+             -> PureLambda a l         -- ^ The term to reduce
              -> PureLambda a l         -- ^ The evaluated term
 
 lamEval bind unfold red = eval
@@ -341,7 +341,7 @@ lamEval bind unfold red = eval
 lamEvalCount :: Bindings a l           -- ^ A set of bindings for unfolding
              -> Bool                   -- ^ Apply full unfolding ?
              -> ReductionStrategy a l  -- ^ Reduction strategy to use
-             -> PureLambda a l         -- ^ The term to reduce             
+             -> PureLambda a l         -- ^ The term to reduce
              -> (PureLambda a l,Integer) -- ^ The evaluated term and reduction count
 
 lamEvalCount bind unfold red = eval 0
@@ -353,13 +353,13 @@ lamEvalCount bind unfold red = eval 0
 -- | Traced evaluation; the result is a list of the reduction
 --   steps taken by the given reduction stragegy.  A non-terminating
 --   term (under the given strategy) will result in an infinite list.
---   For a normalizing term, the last element in the list will be the 
+--   For a normalizing term, the last element in the list will be the
 --   normal  form.
 
 lamEvalTrace :: Bindings a l          -- ^ A set of bindings for unfolding
-             -> Bool		      -- ^ Apply full unfolding ?	   
-             -> ReductionStrategy a l -- ^ Reduction strategy to use	   
-             -> PureLambda a l	      -- ^ The term to reduce             
+             -> Bool                  -- ^ Apply full unfolding ?
+             -> ReductionStrategy a l -- ^ Reduction strategy to use
+             -> PureLambda a l        -- ^ The term to reduce
              -> [PureLambda a l]      -- ^ The list of intermediate reductions
 
 lamEvalTrace bind unfold red = eval
@@ -374,7 +374,7 @@ lamEvalTrace bind unfold red = eval
 -- | If a lambda term is just a let binding, this function will unfold it; otherwise
 --   it will return the term unchanged.  It will result in bottom if the term is not bound.
 
-unfoldTop     :: Bindings () String 
+unfoldTop     :: Bindings () String
               -> PureLambda () String
               -> PureLambda () String
 

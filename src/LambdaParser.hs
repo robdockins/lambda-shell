@@ -21,7 +21,7 @@
 -- | This module defines parsers for lambda terms
 --   and for \"let\" bound definitions.
 
-module LambdaParser 
+module LambdaParser
 ( nameParser
 , lambdaParser
 , definitionFileParser
@@ -49,7 +49,7 @@ import CPS
 data Statement
   = Stmt_eval (PureLambda () String)
   | Stmt_let String (PureLambda () String)
-  | Stmt_isEq (PureLambda () String) 
+  | Stmt_isEq (PureLambda () String)
               (PureLambda () String)
   | Stmt_empty
 
@@ -64,13 +64,13 @@ type LamParser a = GenParser Char LamParseState a
 -- | Parser for an identifier.  An identifier is
 --   a letter followed by zero or more alphanumeric characters (or underscores).
 nameParser :: LamParser String
-nameParser = 
+nameParser =
   do a  <- letter
      as <- many (char '_' <|> alphaNum)
      return (a:as)
 
 -- | Parser for a lambda term.  Function application is left associative.
--- 
+--
 -- @
 --   lambda -\> name
 --   lambda -\> \'(\' lambda \')\'
@@ -112,7 +112,7 @@ statementsParser b = do spaces; x <- p b; eof; return x
 
 
 -- | Parser for a statement.
--- 
+--
 -- @
 --    stmt -\> \'let\' name \'=\' lambda
 --    stmt -\> lambda
@@ -168,7 +168,7 @@ stripComments [] = []
 -- @
 
 definitionFileParser :: Bindings () String -> LamParser (Bindings () String)
-definitionFileParser b = 
+definitionFileParser b =
   (do spaces
       (n,t) <- definitionParser b
       spaces
@@ -176,11 +176,11 @@ definitionFileParser b =
       definitionFileParser b'
   )
   <|> (eof >> return b)
-      
+
 
 
 definitionParser :: Bindings () String -> LamParser (String,PureLambda () String)
-definitionParser b = 
+definitionParser b =
    do n <- nameParser
       spaces
       char '='
@@ -244,7 +244,7 @@ basicSyntax b l =
     parensParser basicSyntax b l <|>
     absParser    basicSyntax b l <|>
     varParser b l
-    
+
 extSyntax :: P
 extSyntax b l =
     parensParser extSyntax b l <|>

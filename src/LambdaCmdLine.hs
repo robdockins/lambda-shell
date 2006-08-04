@@ -18,7 +18,7 @@
  -}
 
 
-module LambdaCmdLine 
+module LambdaCmdLine
 ( lambdaCmdLine
 ) where
 
@@ -58,7 +58,7 @@ doCmdLine :: LambdaCmdLineState -> IO ()
 doCmdLine st =
    case (cmd_input st) of
        Just expr -> evalInput st expr
-       Nothing -> 
+       Nothing ->
            if (cmd_stdin st)
               then evalStdin st
               else runShell st
@@ -96,7 +96,7 @@ initialCmdLineState =
   , cmd_history = Just "lambda.history"
   }
 
-data PrintWhat 
+data PrintWhat
    = PrintNothing
    | PrintVersion
    | PrintHelp
@@ -120,7 +120,7 @@ data LambdaCmdLineArgs
   | NoHistory
 
 options :: [OptDescr LambdaCmdLineArgs]
-options = 
+options =
   [ Option ['u']     ["unfold"]      (NoArg FullUnfold)              "perform full unfolding of let-bound terms"
   , Option ['s']     ["stdin"]       (NoArg ReadStdIn)               "read from standard in"
   , Option ['e']     ["program"]     (ReqArg Program "PROGRAM")      "evaluate statements from command line"
@@ -148,7 +148,7 @@ options =
 -- yeah, I know its ugly
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
-parseCmdLine argv = 
+parseCmdLine argv =
    case getOpt RequireOrder options argv of
      (opts,files,[]) -> (foldl (>>=) (return initialCmdLineState) $ map applyFlag opts) >>= \st ->
                         (foldl (>>=) (return st)                  $ map loadDefs files)
@@ -156,7 +156,7 @@ parseCmdLine argv =
      (_,_,errs)      -> fail (errMsg errs)
 
   where errMsg errs = printUsage (concat (intersperse "\n" errs))
-  
+
         applyFlag :: LambdaCmdLineArgs -> LambdaCmdLineState -> IO LambdaCmdLineState
         applyFlag FullUnfold            st = return st{ cmd_unfold  = True }
         applyFlag ReadStdIn             st = return st{ cmd_stdin   = True }
@@ -183,17 +183,17 @@ parseCmdLine argv =
         applyFlag (Reduction str) st =
             case map toLower str of
                 "whnf"   -> return st{ cmd_red = lamReduceWHNF }
-		"hnf"    -> return st{ cmd_red = lamReduceHNF }
+                "hnf"    -> return st{ cmd_red = lamReduceHNF }
                 "nf"     -> return st{ cmd_red = lamReduceNF }
                 "strict" -> return st{ cmd_red = lamStrictNF }
                 _        -> fail (concat ["'",str,"' is not a valid reduction strategy"])
-                
+
 
 -----------------------------------------------------------------------
 -- Actually run the shell
 
 mapToShellState :: LambdaCmdLineState -> LambdaShellState
-mapToShellState st = 
+mapToShellState st =
   initialShellState
   { letBindings = cmd_binds st
   , fullUnfold  = cmd_unfold st
@@ -265,7 +265,7 @@ compareTerms :: IORef ExitCode
             -> IO ()
 
 compareTerms ec st t1 t2 = do
-  if normalEq (cmd_binds st) t1 t2 
+  if normalEq (cmd_binds st) t1 t2
      then putStrLn "equal"     >> setSucc ec
      else putStrLn "not equal" >> setFail ec
 

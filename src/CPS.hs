@@ -17,7 +17,7 @@
  -   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  -}
 
-{- | 
+{- |
   This module defines CPS transformations on lambda terms.
 -}
 
@@ -30,8 +30,8 @@ module CPS
 
 import Lambda
 
-type CPS 
-    =  Monad m 
+type CPS
+    =  Monad m
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda () String)
@@ -48,7 +48,7 @@ do_simple_cps :: CPS
 do_simple_cps b (Binding _ name) =
     lookupBindingM name b >>= \t -> do_simple_cps b t
 
-do_simple_cps b (Var _ i) = 
+do_simple_cps b (Var _ i) =
     return (Lam () "k" $ App () (Var () 0) $ (Var () (i+1)))
 
 do_simple_cps b (Lam _ l t) = do
@@ -122,7 +122,7 @@ onepass_cps b t = do
    simplify_onepass (App True x (Lam True "q" (Var True 0)))
 
 
-simplify_onepass 
+simplify_onepass
     :: Monad m
     => PureLambda Bool String
     -> m (PureLambda () String)
@@ -141,7 +141,7 @@ simplify_onepass t  = fail $ "bug: found unexpected administrative terms in simp
 
 
 do_onepass_cps
-    :: Monad m 
+    :: Monad m
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda Bool String)
@@ -162,7 +162,7 @@ do_onepass_cps b (Lam _ l t) = do
 do_onepass_cps b (App _ t1 t2) = do
     t1' <- do_onepass_cps b (lamShift 0 1 t1)
     t2' <- do_onepass_cps b (lamShift 0 2 t2)
-    return 
+    return
         (Lam True "k0" $ App True t1' $
            Lam True "m0" $ App True t2' $
              Lam True "n" $
@@ -172,7 +172,7 @@ do_onepass_cps b (App _ t1 t2) = do
 
 
 do_onepass_cps_tail
-    :: Monad m 
+    :: Monad m
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda Bool String)
@@ -194,6 +194,6 @@ do_onepass_cps_tail b (App _ t1 t2) = do
       (Lam True "k0" $ App True t1' $
          Lam True "m" $ App True t2' $
            Lam True "n" $
-             App False (App False (Var True 1) (Var True 0)) 
+             App False (App False (Var True 1) (Var True 0))
                (Var True 2)
       )

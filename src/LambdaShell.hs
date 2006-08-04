@@ -108,7 +108,7 @@ initialShellState =
 lambdaShell :: LambdaShellState -> IO LambdaShellState
 lambdaShell init = do
     let
-      desc = 
+      desc =
          (mkShellDescription commands evaluate)
          { defaultCompletions = Just completeLetBindings
          , historyFile        = histFile init
@@ -164,7 +164,7 @@ commands =
   , cmd "simple_cps"  setCPSSimple   "Use the simple CPS strategy"
   , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
   ]
-  
+
 
 dumpTrace :: File -> Int -> Completable LetBinding -> Sh LambdaShellState ()
 dumpTrace (File f) steps (Completable termStr) = do
@@ -173,7 +173,7 @@ dumpTrace (File f) steps (Completable termStr) = do
    case runParser (lambdaParser (letBindings st)) parseSt "" termStr of
       Left msg   -> shellPutErrLn (show msg)
       Right term -> do
-         let trace = lamEvalTrace (letBindings st) (fullUnfold st) 
+         let trace = lamEvalTrace (letBindings st) (fullUnfold st)
                                   (redStrategy st)
                                   (unfoldTop (letBindings st) term)
          liftIO (writeFile f (unlines . map printLam . take steps $ trace))
@@ -279,9 +279,9 @@ evalExpr t = getShellSt >>= \st -> doEval (unfoldTop (letBindings st) t) st
       shellPutStrLn $ printLam z
 
 
-compareExpr :: PureLambda () String 
+compareExpr :: PureLambda () String
             -> PureLambda () String
-	    -> Sh LambdaShellState ()
+            -> Sh LambdaShellState ()
 
 compareExpr x y = do
     st <- getShellSt
@@ -293,7 +293,7 @@ compareExpr x y = do
 ----------------------------------------------------------------
 -- All the stuff for the tracing subshell
 
-data TraceShellState 
+data TraceShellState
    = TraceShellState
      { tracePos  :: Int
      , traceStep :: Int
@@ -323,7 +323,7 @@ printTrace :: Sh TraceShellState ()
 printTrace = do
   st <- getShellSt
   shellPutStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
-	take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
+        take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
 
 tracePrev :: Sh TraceShellState ()
 tracePrev = do
@@ -348,5 +348,5 @@ mkTraceState term st =
           }
 
 traceSubshell :: PureLambda () String -> IO (Subshell LambdaShellState TraceShellState)
-traceSubshell term = 
+traceSubshell term =
    simpleSubshell (mkTraceState term) mkTraceDesc
