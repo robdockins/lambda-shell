@@ -14,7 +14,7 @@ Build-Depends:
     Shellac >= 0.3,
     Shellac-readline >= 0.1
 
-Executable:      labmdaShell
+Executable:      lambdaShell
 Main-Is:         main.hs
 Hs-Source-Dirs:
     src
