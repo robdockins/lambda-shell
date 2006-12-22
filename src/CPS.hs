@@ -30,20 +30,19 @@ module CPS
 
 import Lambda
 
-type CPS
-    =  Monad m
-    => Bindings () String
+type CPS m
+     = Bindings () String
     -> PureLambda () String
     -> m (PureLambda () String)
 
 -- | The simple CPS transform defined by Plotkin
-simple_cps :: CPS
+simple_cps :: Monad m => CPS m
 
 simple_cps b t = do
     x <- do_simple_cps b t
     return (App () x (Lam () "q" (Var () 0)))
 
-do_simple_cps :: CPS
+do_simple_cps :: Monad m => CPS m
 
 do_simple_cps b (Binding _ name) =
     lookupBindingM name b >>= \t -> do_simple_cps b t
@@ -69,12 +68,12 @@ do_simple_cps b (App _ t1 t2) = do
 -- | A version of Plotkin's CPS transform with additional
 --   eta expansions, preparing for the one-pass
 --   simplifying transform
-eta_cps :: CPS
+eta_cps :: Monad m => CPS m
 eta_cps b t = do
    x <- do_eta_cps b t
    return (App () x (Lam () "q" (Var () 0)))
 
-do_eta_cps :: CPS
+do_eta_cps :: Monad m => CPS m
 
 do_eta_cps b (Binding _ name) =
     lookupBindingM name b >>= \t -> do_simple_cps b t
@@ -116,7 +115,7 @@ do_eta_cps b (App _ t1 t2) = do
 --   which redexes are adminstrative.  In the second pass all administrative
 --   redexes are reduced, leaving only the dynamic redexes.
 
-onepass_cps :: CPS
+onepass_cps :: Monad m => CPS m
 onepass_cps b t = do
    x <- do_onepass_cps b t
    simplify_onepass (App True x (Lam True "q" (Var True 0)))

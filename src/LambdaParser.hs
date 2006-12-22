@@ -55,7 +55,7 @@ data Statement
 
 data LamParseState
    = LamParseState
-   { cpsTransform   :: CPS
+   { cpsTransform   :: CPS LamParser
    , extendedSyntax :: Bool
    }
 

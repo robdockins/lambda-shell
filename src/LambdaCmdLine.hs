@@ -77,7 +77,7 @@ data LambdaCmdLineState
      , cmd_red     :: RS
      , cmd_count   :: Bool
      , cmd_extsyn  :: Bool
-     , cmd_cps     :: CPS
+     , cmd_cps     :: CPS LamParser
      , cmd_history :: Maybe String
      }
 

@@ -79,7 +79,7 @@ data LambdaShellState =
   , fullUnfold  :: Bool      -- ^ Should binding names be eagerly unfolded?
   , redStrategy :: RS        -- ^ The reduction strategy currently in use
   , showCount   :: Bool      -- ^ If true, show the number of reductions at each step
-  , cpsStrategy :: CPS       -- ^ The current CPS strategy
+  , cpsStrategy :: CPS LamParser -- ^ The current CPS strategy
   , extSyntax   :: Bool      -- ^ Is extended syntax enabled?
   , histFile    :: Maybe String -- ^ A file for command history
   }
@@ -236,7 +236,7 @@ setCPSSimple = setCPS simple_cps "simple"
 setCPSOnepass :: Sh LambdaShellState ()
 setCPSOnepass = setCPS onepass_cps "onepass"
 
-setCPS :: CPS -> String -> Sh LambdaShellState ()
+setCPS :: CPS LamParser -> String -> Sh LambdaShellState ()
 setCPS cps name = do
    shellPutInfoLn $ concat ["unsing CPS strategy: ",name]
    modifyShellSt (\st -> st{ cpsStrategy = cps })
