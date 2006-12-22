@@ -59,7 +59,7 @@ data LamParseState
    , extendedSyntax :: Bool
    }
 
-type LamParser a = GenParser Char LamParseState a
+type LamParser = GenParser Char LamParseState
 
 -- | Parser for an identifier.  An identifier is
 --   a letter followed by zero or more alphanumeric characters (or underscores).
