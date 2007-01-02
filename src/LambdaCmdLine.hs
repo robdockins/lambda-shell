@@ -208,8 +208,8 @@ mapToShellState st =
 
 runShell :: LambdaCmdLineState -> IO ()
 runShell st = do
-   putStrLn versionInfo
-   putStrLn shellMessage
+--   putStrLn versionInfo
+--   putStrLn shellMessage
    lambdaShell (mapToShellState st)
    return ()
 
