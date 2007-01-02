@@ -276,7 +276,7 @@ evalExpr t = getShellSt >>= \st -> doEval (unfoldTop (letBindings st) t) st
    evalCount t st = do
       let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
       shellPutStrLn $ printLam z
-      shellPutStrLn $ concat ["<<",show n," reductions>>"]
+      shellPutInfoLn $ concat ["<<",show n," reductions>>"]
 
    eval t st = do
       let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
