@@ -112,6 +112,8 @@ lambdaShell init = do
          (mkShellDescription commands evaluate)
          { defaultCompletions = Just completeLetBindings
          , historyFile        = histFile init
+         , greetingText       = Just (versionInfo ++ shellMessage)
+         , secondaryPrompt    = Just $ \_ -> return "] "
          }
     runShell desc defaultBackend init
 
