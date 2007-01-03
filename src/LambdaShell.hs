@@ -112,6 +112,7 @@ lambdaShell init = do
          (mkShellDescription commands evaluate)
          { defaultCompletions = Just completeLetBindings
          , historyFile        = histFile init
+         , secondaryPrompt    = Just $ \_ -> return "] "
          }
     runShell desc defaultBackend init
 
@@ -245,16 +246,20 @@ setCPS cps name = do
 
 evaluate :: String -> Sh LambdaShellState ()
 evaluate str = do
-  st <- getShellSt
-  let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
-  case runParser (statementParser (letBindings st)) parseSt "" str of
-     Left err   -> shellPutErrLn (show err)
-     Right stmt ->
-       case stmt of
-         Stmt_eval expr      -> evalExpr expr
-         Stmt_isEq x y       -> compareExpr x y
-         Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm expr (letBindings st) })
-         Stmt_empty          -> return ()
+  case reverse str of
+   '@':_ -> shellSpecial (ShellContinueLine (init str))
+   _ -> do
+      st <- getShellSt
+      let parseSt = LamParseState (cpsStrategy st) (extSyntax st)
+      case runParser (statementParser (letBindings st)) parseSt "" str of
+        Left err   -> shellPutErrLn (show err)
+        Right stmt ->
+          case stmt of
+           Stmt_eval expr      -> evalExpr expr
+           Stmt_isEq x y       -> compareExpr x y
+           Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm expr (letBindings st) })
+           Stmt_empty          -> return ()
+
 
 evalExpr :: PureLambda () String -> Sh LambdaShellState ()
 evalExpr t = getShellSt >>= \st -> doEval (unfoldTop (letBindings st) t) st
