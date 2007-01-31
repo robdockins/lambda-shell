@@ -1,17 +1,23 @@
 Name:            LambdaShell
-Version:         0.5
+Version:         0.4
 License:         GPL
 License-file:    LICENSE
 Author:          Robert Dockins
+Maintainer:      robdockins AT fastmail DOT fm
+Stability:       Beta
 Synopsis:        Simple shell for evaluating lambda expressions
-Stability:       Alpha
+Description:
+  The lambda shell is a feature-rich shell environment and command-line tool for
+  evaluating terms of the pure, untyped lambda calculus.  The Lambda
+  Shell builds on the shell creation framework Shellac, and showcases
+  most of Shellac's features.
 Build-Depends:
     base >= 1.0,
     haskell98 >= 1.0,
     parsec >= 1.0,
     mtl >= 1.0,
     readline >= 1.0,
-    Shellac >= 0.5,
+    Shellac >= 0.3,
     Shellac-readline >= 0.1
 
 Executable:      lambdaShell
