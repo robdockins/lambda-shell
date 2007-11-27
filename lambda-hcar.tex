@@ -1,0 +1,49 @@
+\documentclass{article}
+
+\usepackage{hcar}
+
+\begin{document}
+
+\begin{hcarentry}{Lambda Shell}
+\report{Rob Dockins}
+\status{beta, maintained}
+\makeheader
+
+The Lambda Shell is a feature-rich shell environment and command-line
+tool for evaluating terms of the pure, untyped lambda calculus.  The Lambda
+Shell builds on the shell creation framework Shellac, and showcases
+most of Shellac's features.
+
+Features of the Lamba Shell include:
+
+\begin{itemize}
+\item Evalutate lambda terms directly from the shell prompt using
+      normal or applicative order.  In normal order, one can evaluate
+      to normal form, head normal form, or weak head normal form.
+\item Define aliases for lambda terms using a top level, non-recursive
+      'let' construct.
+\item Show traces of term evaluation, or dump the trace to a file.
+\item Count the number of reductions when evaluating terms.
+\item Test two lambda terms for beta-equivalance (that is; if two
+      terms, when evaluated to normal form, are alpha equivalant).
+\item Programs can be entered from the command line (using the -e option)
+      or piped into stdin (using the -s option).
+\item Perform continuation passing style (CPS) transforms on terms before
+      evaluation using the double-bracket syntax, e.g.,  `[[ five ]]'.
+\end{itemize}
+
+
+The Lambda Shell was written as a showcase and textbook
+example for how to use the Shellac shell-creation library.
+However, it can also be used to gain a better understanding
+of the pure lambda calculus.
+
+
+\FurtherReading
+\begin{itemize}
+\item \url{http://hackage.haskell.org/cgi-bin/hackage-scripts/package/LambdaShell}
+\item \url{http://hackage.haskell.org/cgi-bin/hackage-scripts/package/Shellac}
+\end{itemize}
+\end{hcarentry}
+
+\end{document}
