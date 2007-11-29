@@ -19,6 +19,14 @@ Description:
 Executable lambdaShell
   Main-Is: main.hs
   Hs-Source-Dirs: src
+  Other-Modules:
+     CPS
+     Env
+     Lambda
+     LambdaCmdLine
+     LambdaParser
+     LambdaShell
+     Version
   Extensions:
      MultiParamTypeClasses
   Extra-libraries:
