@@ -48,6 +48,7 @@ import CPS
 
 data Statement
   = Stmt_eval (PureLambda () String)
+  | Stmt_decl String
   | Stmt_let String (PureLambda () String)
   | Stmt_isEq (PureLambda () String)
               (PureLambda () String)
@@ -99,7 +100,7 @@ statementsParser b = do spaces; x <- p b; eof; return x
 
  where p b = do x <- stmtParser b
                 let b' = case x of
-                          (Stmt_let name t) -> Map.insert name t b
+                          (Stmt_let name t) -> Map.insert name (Just t) b
                           _ -> b
                 spaces
                 ( do char ';'
@@ -130,6 +131,7 @@ statementParser b = do
 stmtParser :: Bindings () String -> LamParser Statement
 stmtParser b =
        try (letDefParser b     >>= return . uncurry Stmt_let)
+   <|> try (declParser b       >>= return . Stmt_decl)
    <|> try (compParser b       >>= return . uncurry Stmt_isEq)
    <|> (lambdaParser b         >>= return . Stmt_eval)
    <|> (return Stmt_empty)
@@ -144,6 +146,12 @@ compParser b = do
     spaces
     return (x,y)
 
+declParser :: Bindings () String -> LamParser String
+declParser b = do
+    string "decl"
+    many1 space
+    n <- nameParser
+    return n    
 
 letDefParser :: Bindings () String -> LamParser (String,PureLambda () String)
 letDefParser b = do
@@ -172,7 +180,7 @@ definitionFileParser b =
   (do spaces
       (n,t) <- definitionParser b
       spaces
-      let b' = Map.insert n t b
+      let b' = Map.insert n (Just t) b
       definitionFileParser b'
   )
   <|> (eof >> return b)

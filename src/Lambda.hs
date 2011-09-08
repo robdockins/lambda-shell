@@ -71,17 +71,16 @@ import qualified Data.Map as Map
 import Control.Monad (MonadPlus (..))
 import Control.Monad.Identity
 
-type Bindings a l = Map.Map String (PureLambda a l)
+type Bindings a l = Map.Map String (Maybe (PureLambda a l))
 
-lookupBinding :: String -> Bindings a l -> PureLambda a l
+lookupBinding :: String -> Bindings a l -> Maybe (PureLambda a l)
 lookupBinding name b  = runIdentity (lookupBindingM name b)
 
-lookupBindingM :: Monad m => String -> Bindings a l -> m (PureLambda a l)
+lookupBindingM :: Monad m => String -> Bindings a l -> m (Maybe (PureLambda a l))
 lookupBindingM name b =
    case Map.lookup name b of
-      Just x  -> return x
+      Just x -> return x
       Nothing -> fail (concat ["'",name,"' not bound"])
-
 
 ----------------------------------------------------------------
 -- | The type of lambda terms;
@@ -250,7 +249,7 @@ lamReduceWHNF b unfold (App _ (Lam _ _ t1) t2) = Just (lamSubst t2 t1)
 lamReduceWHNF b unfold (App a t1 t2)           = lamReduceWHNF b True t1   >>= \t1' -> return (App a t1' t2)
 lamReduceWHNF b unfold (Lam a l t)             = Nothing
 lamReduceWHNF b unfold (Var _ _)               = Nothing
-lamReduceWHNF b unfold (Binding a name)        = if unfold then Just (lookupBinding name b) else Nothing
+lamReduceWHNF b unfold (Binding a name)        = if unfold then lookupBinding name b else Nothing
 
 
 -------------------------------------------------------------------------------------
@@ -262,7 +261,7 @@ lamReduceHNF b unfold (App _ (Lam _ _ t1) t2)  = Just (lamSubst t2 t1)
 lamReduceHNF b unfold (App a t1 t2)            = lamReduceHNF b True t1   >>= \t1' -> return (App a t1' t2)
 lamReduceHNF b unfold (Lam a l t)              = lamReduceHNF b unfold t  >>= \t'  -> return (Lam a l t')
 lamReduceHNF b unfold (Var _ _)                = Nothing
-lamReduceHNF b unfold (Binding a name)         = if unfold then Just (lookupBinding name b) else Nothing
+lamReduceHNF b unfold (Binding a name)         = if unfold then lookupBinding name b else Nothing
 
 
 
@@ -277,7 +276,7 @@ lamReduceNF b unfold (App a t1 t2)             = (lamReduceNF b True t1   >>= \t
                                                  (lamReduceNF b unfold t2 >>= \t2' -> return (App a t1 t2'))
 lamReduceNF b unfold (Lam a l t)               = lamReduceNF b unfold t   >>= \t'  -> return (Lam a l t')
 lamReduceNF b unfold (Var _ _)                 = Nothing
-lamReduceNF b unfold (Binding a name)          = if unfold then Just (lookupBinding name b) else Nothing
+lamReduceNF b unfold (Binding a name)          = if unfold then lookupBinding name b else Nothing
 
 
 
@@ -294,7 +293,7 @@ lamStrictNF b unfold (App a t1 t2)             = (lamStrictNF b True t1   >>= \t
                                                  (lamStrictNF b unfold t2 >>= \t2' -> return (App a t1 t2'))
 lamStrictNF b unfold (Lam a l t)               = lamStrictNF b unfold t   >>= \t'  -> return (Lam a l t')
 lamStrictNF b unfold (Var _ _)                 = Nothing
-lamStrictNF b unfold (Binding a name)          = if unfold then Just (lookupBinding name b) else Nothing
+lamStrictNF b unfold (Binding a name)          = if unfold then lookupBinding name b else Nothing
 
 
 
@@ -378,5 +377,6 @@ unfoldTop     :: Bindings () String
               -> PureLambda () String
               -> PureLambda () String
 
-unfoldTop binds (Binding a x) = Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x binds
+unfoldTop binds (Binding a x) = maybe (Binding a x) id $
+                                  Map.findWithDefault (error $ concat ["'",x,"' not bound"]) x binds
 unfoldTop binds x             = x

@@ -41,10 +41,12 @@ import Text.ParserCombinators.Parsec (runParser)
 
 import System.Console.Shell
 import System.Console.Shell.ShellMonad
-import System.Console.Shell.Backend.Readline
---import System.Console.Shell.Backend.Basic
 
-defaultBackend = readlineBackend
+import System.Console.Shell.Backend.Compatline
+--import System.Console.Shell.Backend.Haskeline
+
+defaultBackend = compatlineBackend
+--defaultBackend = haskelineBackend
 
 type RS = ReductionStrategy () String
 
@@ -74,7 +76,7 @@ data LambdaShellState =
   LambdaShellState
   { trace       :: Bool      -- ^ Step through the reduction one redex at a time
   , traceNum    :: Int       -- ^ Number of reduction steps to display during tracing
-  , letBindings :: Map.Map String (PureLambda () String)
+  , letBindings :: Bindings () String
                              -- ^ All \"let\" bindings currently in scope
   , fullUnfold  :: Bool      -- ^ Should binding names be eagerly unfolded?
   , redStrategy :: RS        -- ^ The reduction strategy currently in use
@@ -165,7 +167,14 @@ commands =
   , cmd "version"    (shellPutInfo versionInfo) "Print version info"
   , cmd "simple_cps"  setCPSSimple   "Use the simple CPS strategy"
   , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
+
+  , cmd "backend"    printBackend "Print the backend configuration"
   ]
+
+
+printBackend :: Sh LambdaShellState ()
+printBackend =
+  shellPutStrLn (show compatlineConfig)
 
 
 dumpTrace :: File -> Int -> Completable LetBinding -> Sh LambdaShellState ()
@@ -189,14 +198,17 @@ showBinding (Completable name) = do
     st <- getShellSt
     case Map.lookup name (letBindings st) of
         Nothing -> shellPutErrLn  $ concat ["'",name,"' not bound"]
-        Just t  -> shellPutInfoLn $ concat [name," = ",printLam t]
+        Just Nothing  -> shellPutInfoLn $ concat [name," << free variable >>"]
+        Just (Just t) -> shellPutInfoLn $ concat [name," = ",printLam t]
 
 showBindings :: Sh LambdaShellState ()
 showBindings = do
    st <- getShellSt
    shellPutStrLn $
      Map.foldWithKey
-       (\name t x -> concat [name," = ",printLam t,"\n",x])
+       (\name t x -> case t of
+              Nothing -> concat [name," << free variable >>\n",x]
+              Just t  -> concat [name," = ",printLam t,"\n",x])
        ""
        (letBindings st)
 
@@ -258,7 +270,8 @@ evaluate str = do
           case stmt of
            Stmt_eval expr      -> evalExpr expr
            Stmt_isEq x y       -> compareExpr x y
-           Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm expr (letBindings st) })
+           Stmt_decl nm        -> modifyShellSt (\st -> st{ letBindings = Map.insert nm Nothing (letBindings st) })
+           Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm (Just expr) (letBindings st) })
            Stmt_empty          -> return ()
 
 

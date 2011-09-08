@@ -45,7 +45,9 @@ simple_cps b t = do
 do_simple_cps :: Monad m => CPS m
 
 do_simple_cps b (Binding _ name) =
-    lookupBindingM name b >>= \t -> do_simple_cps b t
+    lookupBindingM name b >>=
+       maybe (return (Lam () "k" $ App () (Var () 0) $ (Binding () name)))
+             (do_simple_cps b)
 
 do_simple_cps b (Var _ i) =
     return (Lam () "k" $ App () (Var () 0) $ (Var () (i+1)))
@@ -76,7 +78,9 @@ eta_cps b t = do
 do_eta_cps :: Monad m => CPS m
 
 do_eta_cps b (Binding _ name) =
-    lookupBindingM name b >>= \t -> do_simple_cps b t
+    lookupBindingM name b >>=
+      maybe (return (Lam () "k" $ App () (Var () 0) $ (Binding () name)))
+            (do_simple_cps b)
 
 do_eta_cps b (Var _ i) =
     return (Lam () "k" $ App () (Var () 0) $ (Var () (i+1)))
@@ -146,7 +150,9 @@ do_onepass_cps
     -> m (PureLambda Bool String)
 
 do_onepass_cps b (Binding _ name) =
-     lookupBindingM name b >>= \t -> do_onepass_cps b t
+     lookupBindingM name b >>= 
+        maybe (return (Lam True "k" $ App True (Var True 0) $ (Binding False name)))
+              (do_onepass_cps b)
 
 do_onepass_cps b (Var _ i) =
      return (Lam True "k" $ App True (Var True 0) $ (Var False (i+1)))
@@ -175,6 +181,11 @@ do_onepass_cps_tail
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda Bool String)
+
+do_onepass_cps_tail b (Binding _ name) =
+     lookupBindingM name b >>=
+       maybe (return (Lam True "k0" (App False (Var True 0) (Binding False name))))
+             (do_onepass_cps_tail b)
 
 do_onepass_cps_tail b (Var _ i) =
     return (Lam True "k0" (App False (Var True 0) (Var False (i+1))))

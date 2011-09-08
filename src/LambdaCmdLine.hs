@@ -240,7 +240,8 @@ setFail ec = writeIORef ec (ExitFailure 100)
 evalStmt :: IORef ExitCode -> LambdaCmdLineState -> Statement -> IO LambdaCmdLineState
 evalStmt ec st (Stmt_eval t)     = evalTerm st t >> setSucc ec >> return st
 evalStmt ec st (Stmt_isEq t1 t2) = compareTerms ec st t1 t2 >> return st
-evalStmt ec st (Stmt_let name t) = setSucc ec >> return st{ cmd_binds = Map.insert name t (cmd_binds st) }
+evalStmt ec st (Stmt_let name t) = setSucc ec >> return st{ cmd_binds = Map.insert name (Just t) (cmd_binds st) }
+evalStmt ec st (Stmt_decl name)  = setSucc ec >> return st{ cmd_binds = Map.insert name Nothing (cmd_binds st) }
 evalStmt ec st (Stmt_empty)      = setSucc ec >> return st
 
 
