@@ -1,6 +1,6 @@
 {-
  -   The Lambda Shell, an interactive environment for evaluating pure untyped lambda terms.
- -   Copyright (C) 2005-2007, Robert Dockins
+ -   Copyright (C) 2005-2011, Robert Dockins
  -
  -   This program is free software; you can redistribute it and/or modify
  -   it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ versionInfo :: String
 versionInfo = unlines
   [ ""
   , "The Lambda Shell, version "++(showVersion version)
-  , "Copyright 2005-2007, Robert Dockins"
+  , "Copyright 2005-2011, Robert Dockins"
   , ""
   ]
 
@@ -35,8 +35,10 @@ shellMessage :: String
 shellMessage = unlines
   [ "The Lambda Shell comes with ABSOLUTELY NO WARRANTY; for details"
   , "type ':nowarranty'.  This is free software, and you are welcome to"
-  , "redistribute it under certain conditions; type ':gpl'"
-  , "for details"
+  , "redistribute it under certain conditions; type ':gpl' for details."
+  , ""
+  , "Type ':help' for a listing of shell commands."
+  , ""
   ]
 
 noWarranty :: String  

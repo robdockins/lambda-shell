@@ -1,7 +1,7 @@
 Name:            LambdaShell
 Cabal-Version:   >= 1.2
 Build-Type:	 Simple
-Version:         0.9.1
+Version:         0.9.2
 License:         GPL
 License-file:    LICENSE
 Author:          Robert Dockins
@@ -29,13 +29,10 @@ Executable lambdaShell
      Version
   Extensions:
      MultiParamTypeClasses
-  Extra-libraries:
-     readline
-  GHC-Options: -O
+  GHC-Options: -O -W
   Build-Depends:
-     base, haskell98, parsec,
-     mtl, readline,
+     base, haskell98, parsec, mtl,
      Shellac >= 0.9,
-     Shellac-readline >= 0.9
+     Shellac-compatline >= 0.9
   if impl( ghc >= 6.8 )
      Build-Depends: containers

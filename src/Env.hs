@@ -1,6 +1,6 @@
 {-
  -   The Lambda Shell, an interactive environment for evaluating pure untyped lambda terms.
- -   Copyright (C) 2005-2007, Robert Dockins
+ -   Copyright (C) 2005-2011, Robert Dockins
  -
  -   This program is free software; you can redistribute it and/or modify
  -   it under the terms of the GNU General Public License as published by
