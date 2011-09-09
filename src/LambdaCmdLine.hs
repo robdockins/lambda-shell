@@ -145,7 +145,7 @@ options =
 
 -----------------------------------------------------------------
 -- Parser for the command line
--- yeah, I know its ugly
+-- Yeah, I know it's ugly.
 
 parseCmdLine :: [String] -> IO LambdaCmdLineState
 parseCmdLine argv =
@@ -208,8 +208,6 @@ mapToShellState st =
 
 runShell :: LambdaCmdLineState -> IO ()
 runShell st = do
---   putStrLn versionInfo
---   putStrLn shellMessage
    lambdaShell (mapToShellState st)
    return ()
 
@@ -249,11 +247,11 @@ evalTerm :: LambdaCmdLineState -> PureLambda () String -> IO ()
 evalTerm st t = doEval (unfoldTop (cmd_binds st) t)
  where doEval t =
          case cmd_trace st of
-            Nothing       -> putStrLn (printLam (eval t))
+            Nothing       -> putStrLn (printLam (cmd_binds st) (eval t))
             Just Nothing  -> printTrace 50 t
             Just (Just x) -> printTrace x t
 
-       printTrace x t = putStr $ unlines $ map printLam $ take x $ trace t
+       printTrace x t = putStr $ unlines $ map (printLam (cmd_binds st)) $ take x $ trace t
 
        eval t  = lamEval      (cmd_binds st) (cmd_unfold st) (cmd_red st) t
        trace t = lamEvalTrace (cmd_binds st) (cmd_unfold st) (cmd_red st) t

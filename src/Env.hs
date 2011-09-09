@@ -29,8 +29,8 @@ import qualified Data.Set as Set
 
 data Env = Env !Int ![String] !(Set.Set String)
 
-empty :: Env
-empty = Env 0 [] (Set.empty)
+empty :: Set.Set String -> Env
+empty = Env 0 []
 
 insert :: String -> Env -> Env
 insert label (Env z labels set)

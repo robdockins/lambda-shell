@@ -128,11 +128,11 @@ normalEq binds t1 t2 =
 -- | Show a lambda term, minimizing parenthises and disambiguating
 --   variables in nested scopes with identical labels.
 
-printLam :: PureLambda a String -> String
-printLam lam = showLam lam []
+printLam :: Bindings a String -> PureLambda a String -> String
+printLam binds lam = showLam binds lam []
 
-showLam :: PureLambda a String -> ShowS
-showLam = showLam_ Env.empty TopContext 0
+showLam :: Bindings a String -> PureLambda a String -> ShowS
+showLam binds = showLam_ (Env.empty (Map.keysSet binds)) TopContext 0
 
 
 data LamContext

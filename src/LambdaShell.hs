@@ -187,7 +187,7 @@ dumpTrace (File f) steps (Completable termStr) = do
          let trace = lamEvalTrace (letBindings st) (fullUnfold st)
                                   (redStrategy st)
                                   (unfoldTop (letBindings st) term)
-         liftIO (writeFile f (unlines . map printLam . take steps $ trace))
+         liftIO (writeFile f (unlines . map (printLam (letBindings st)) . take steps $ trace))
 
 
 setTraceStep :: Int -> Sh LambdaShellState ()
@@ -199,7 +199,7 @@ showBinding (Completable name) = do
     case Map.lookup name (letBindings st) of
         Nothing -> shellPutErrLn  $ concat ["'",name,"' not bound"]
         Just Nothing  -> shellPutInfoLn $ concat [name," << free variable >>"]
-        Just (Just t) -> shellPutInfoLn $ concat [name," = ",printLam t]
+        Just (Just t) -> shellPutInfoLn $ concat [name," = ",printLam (letBindings st) t]
 
 showBindings :: Sh LambdaShellState ()
 showBindings = do
@@ -208,7 +208,7 @@ showBindings = do
      Map.foldWithKey
        (\name t x -> case t of
               Nothing -> concat [name," << free variable >>\n",x]
-              Just t  -> concat [name," = ",printLam t,"\n",x])
+              Just t  -> concat [name," = ",printLam (letBindings st) t,"\n",x])
        ""
        (letBindings st)
 
@@ -290,12 +290,12 @@ evalExpr t = getShellSt >>= \st -> doEval (unfoldTop (letBindings st) t) st
 
    evalCount t st = do
       let (z,n) = lamEvalCount (letBindings st) (fullUnfold st) (redStrategy st) t
-      shellPutStrLn $ printLam z
+      shellPutStrLn $ printLam (letBindings st) z
       shellPutInfoLn $ concat ["<<",show n," reductions>>"]
 
    eval t st = do
       let z = lamEval (letBindings st) (fullUnfold st) (redStrategy st) t
-      shellPutStrLn $ printLam z
+      shellPutStrLn $ printLam (letBindings st) z
 
 
 compareExpr :: PureLambda () String
@@ -314,7 +314,8 @@ compareExpr x y = do
 
 data TraceShellState
    = TraceShellState
-     { tracePos  :: Int
+     { traceBindings :: Bindings () String
+     , tracePos  :: Int
      , traceStep :: Int
      , traceList :: [PureLambda () String]
      }
@@ -341,7 +342,7 @@ traceShellCommands =
 printTrace :: Sh TraceShellState ()
 printTrace = do
   st <- getShellSt
-  shellPutStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam t]) $
+  shellPutStr $ unlines $ map (\(n,t) -> concat[show n,") ",printLam (traceBindings st) t]) $
         take (traceStep st) $ drop (tracePos st) $ zip [1..] (traceList st)
 
 tracePrev :: Sh TraceShellState ()
@@ -364,6 +365,7 @@ mkTraceState term st =
           { tracePos  = 0
           , traceStep = traceNum st
           , traceList = lamEvalTrace (letBindings st) (fullUnfold st) (redStrategy st) term
+          , traceBindings = letBindings st
           }
 
 traceSubshell :: PureLambda () String -> IO (Subshell LambdaShellState TraceShellState)
