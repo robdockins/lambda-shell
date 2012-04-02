@@ -270,7 +270,7 @@ evaluate str = do
           case stmt of
            Stmt_eval expr      -> evalExpr expr
            Stmt_isEq x y       -> compareExpr x y
-           Stmt_decl nm        -> modifyShellSt (\st -> st{ letBindings = Map.insert nm Nothing (letBindings st) })
+           Stmt_decl nms       -> modifyShellSt (\st -> st{ letBindings = foldr (\x -> Map.insert x Nothing) (letBindings st) nms })
            Stmt_let nm expr    -> modifyShellSt (\st -> st{ letBindings = Map.insert nm (Just expr) (letBindings st) })
            Stmt_empty          -> return ()
 

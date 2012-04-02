@@ -48,7 +48,7 @@ import CPS
 
 data Statement
   = Stmt_eval (PureLambda () String)
-  | Stmt_decl String
+  | Stmt_decl [String]
   | Stmt_let String (PureLambda () String)
   | Stmt_isEq (PureLambda () String)
               (PureLambda () String)
@@ -146,12 +146,11 @@ compParser b = do
     spaces
     return (x,y)
 
-declParser :: Bindings () String -> LamParser String
+declParser :: Bindings () String -> LamParser [String]
 declParser b = do
     string "decl"
     many1 space
-    n <- nameParser
-    return n    
+    sepBy1 nameParser (many1 space)
 
 letDefParser :: Bindings () String -> LamParser (String,PureLambda () String)
 letDefParser b = do
