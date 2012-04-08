@@ -27,6 +27,7 @@ Executable lambdaShell
      LambdaParser
      LambdaShell
      Version
+     Paths_LambdaShell
   Extensions:
      MultiParamTypeClasses
   GHC-Options: -W
