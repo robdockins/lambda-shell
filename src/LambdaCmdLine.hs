@@ -24,7 +24,7 @@ module LambdaCmdLine
 
 import Data.IORef
 import Numeric
-import Maybe
+import Data.Maybe
 import Data.List
 import Data.Char
 import qualified Data.Map as Map

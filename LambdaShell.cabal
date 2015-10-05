@@ -1,7 +1,7 @@
 Name:            LambdaShell
-Cabal-Version:   >= 1.2
+Cabal-Version:   >= 1.22
 Build-Type:	 Simple
-Version:         0.9.2
+Version:         0.9.9
 License:         GPL
 License-file:    LICENSE
 Author:          Robert Dockins
@@ -9,7 +9,7 @@ Maintainer:      robdockins AT fastmail DOT fm
 Stability:       Beta
 Category:        Compilers/Interpreters
 Synopsis:        Simple shell for evaluating lambda expressions
-Homepage:        http://www.cs.princeton.edu/~rdockins/lambda/home/
+Homepage:        http://rwd.rdockins.name/lambda/home/
 Description:
   The lambda shell is a feature-rich shell environment and command-line tool for
   evaluating terms of the pure, untyped lambda calculus.  The Lambda
@@ -28,13 +28,13 @@ Executable lambdaShell
      LambdaShell
      Version
      Paths_LambdaShell
-  Extensions:
-     MultiParamTypeClasses
   GHC-Options: -W
+  Default-Extensions:
+     MultiParamTypeClasses
+  Default-Language: Haskell2010
   Build-Depends:
-     base >= 2, base < 5,
-     haskell98, parsec, mtl,
-     Shellac >= 0.9,
-     Shellac-compatline >= 0.9
-  if impl( ghc >= 6.8 )
-     Build-Depends: containers
+     base == 4.*,
+     parsec, mtl,
+     Shellac >= 0.9.9,
+     Shellac-readline,
+     containers

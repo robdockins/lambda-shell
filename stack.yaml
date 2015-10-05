@@ -1,0 +1,7 @@
+packages:
+ - .
+ - ../shellac
+ - ../shellac/shellac-readline
+extra-deps:
+ - readline-1.0.3.0
+resolver: lts-3.3

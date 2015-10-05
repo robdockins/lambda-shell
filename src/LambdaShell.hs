@@ -42,11 +42,14 @@ import Text.ParserCombinators.Parsec (runParser)
 import System.Console.Shell
 import System.Console.Shell.ShellMonad
 
-import System.Console.Shell.Backend.Compatline
+
+import System.Console.Shell.Backend.Readline
+--import System.Console.Shell.Backend.Compatline
 --import System.Console.Shell.Backend.Haskeline
 
-defaultBackend = compatlineBackend
+--defaultBackend = compatlineBackend
 --defaultBackend = haskelineBackend
+defaultBackend = readlineBackend
 
 type RS = ReductionStrategy () String
 
@@ -168,13 +171,13 @@ commands =
   , cmd "simple_cps"  setCPSSimple   "Use the simple CPS strategy"
   , cmd "onepass_cps" setCPSOnepass  "Use the onepass optimizing CPS strategy"
 
-  , cmd "backend"    printBackend "Print the backend configuration"
+--  , cmd "backend"    printBackend "Print the backend configuration"
   ]
 
 
-printBackend :: Sh LambdaShellState ()
-printBackend =
-  shellPutStrLn (show compatlineConfig)
+-- printBackend :: Sh LambdaShellState ()
+-- printBackend =
+--   shellPutStrLn (show compatlineConfig)
 
 
 dumpTrace :: File -> Int -> Completable LetBinding -> Sh LambdaShellState ()
