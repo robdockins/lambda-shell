@@ -29,6 +29,8 @@
  the definition.
 -}
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Lambda (
 -- * Type Definitions
   Bindings
@@ -69,14 +71,25 @@ import Data.List
 import qualified Env as Env
 import qualified Data.Map as Map
 import Control.Monad (MonadPlus (..))
-import Control.Monad.Identity
+import qualified Control.Monad.Fail as Fail
 
 type Bindings a l = Map.Map String (Maybe (PureLambda a l))
 
-lookupBinding :: String -> Bindings a l -> Maybe (PureLambda a l)
-lookupBinding name b  = runIdentity (lookupBindingM name b)
+-- From Agda source code: src/full/Agda/Utils/Fail.hs
+-- | A pure MonadFail.
+newtype Fail a = Fail { runFail :: Either String a }
+  deriving (Functor, Applicative, Monad)
 
-lookupBindingM :: Monad m => String -> Bindings a l -> m (Maybe (PureLambda a l))
+instance Fail.MonadFail Fail where
+  fail = Fail . Left
+
+runFail_ :: Fail a -> a
+runFail_ = either error id . runFail
+
+lookupBinding :: String -> Bindings a l -> Maybe (PureLambda a l)
+lookupBinding name b = runFail_ (lookupBindingM name b)
+
+lookupBindingM :: Fail.MonadFail m => String -> Bindings a l -> m (Maybe (PureLambda a l))
 lookupBindingM name b =
    case Map.lookup name b of
       Just x -> return x
