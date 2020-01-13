@@ -208,7 +208,7 @@ showBindings :: Sh LambdaShellState ()
 showBindings = do
    st <- getShellSt
    shellPutStrLn $
-     Map.foldWithKey
+     Map.foldrWithKey
        (\name t x -> case t of
               Nothing -> concat [name," << free variable >>\n",x]
               Just t  -> concat [name," = ",printLam (letBindings st) t,"\n",x])

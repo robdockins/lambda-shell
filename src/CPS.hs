@@ -28,6 +28,8 @@ module CPS
 , CPS
 ) where
 
+import qualified Control.Monad.Fail as Fail
+
 import Lambda
 
 type CPS m
@@ -36,13 +38,13 @@ type CPS m
     -> m (PureLambda () String)
 
 -- | The simple CPS transform defined by Plotkin
-simple_cps :: Monad m => CPS m
+simple_cps :: Fail.MonadFail m => CPS m
 
 simple_cps b t = do
     x <- do_simple_cps b t
     return (App () x (Lam () "q" (Var () 0)))
 
-do_simple_cps :: Monad m => CPS m
+do_simple_cps :: Fail.MonadFail m => CPS m
 
 do_simple_cps b (Binding _ name) =
     lookupBindingM name b >>=
@@ -70,12 +72,12 @@ do_simple_cps b (App _ t1 t2) = do
 -- | A version of Plotkin's CPS transform with additional
 --   eta expansions, preparing for the one-pass
 --   simplifying transform
-eta_cps :: Monad m => CPS m
+eta_cps :: Fail.MonadFail m => CPS m
 eta_cps b t = do
    x <- do_eta_cps b t
    return (App () x (Lam () "q" (Var () 0)))
 
-do_eta_cps :: Monad m => CPS m
+do_eta_cps :: Fail.MonadFail m => CPS m
 
 do_eta_cps b (Binding _ name) =
     lookupBindingM name b >>=
@@ -119,14 +121,14 @@ do_eta_cps b (App _ t1 t2) = do
 --   which redexes are adminstrative.  In the second pass all administrative
 --   redexes are reduced, leaving only the dynamic redexes.
 
-onepass_cps :: Monad m => CPS m
+onepass_cps :: Fail.MonadFail m => CPS m
 onepass_cps b t = do
    x <- do_onepass_cps b t
    simplify_onepass (App True x (Lam True "q" (Var True 0)))
 
 
 simplify_onepass
-    :: Monad m
+    :: Fail.MonadFail m
     => PureLambda Bool String
     -> m (PureLambda () String)
 
@@ -144,7 +146,7 @@ simplify_onepass t  = fail $ "bug: found unexpected administrative terms in simp
 
 
 do_onepass_cps
-    :: Monad m
+    :: Fail.MonadFail m
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda Bool String)
@@ -177,7 +179,7 @@ do_onepass_cps b (App _ t1 t2) = do
 
 
 do_onepass_cps_tail
-    :: Monad m
+    :: Fail.MonadFail m
     => Bindings () String
     -> PureLambda () String
     -> m (PureLambda Bool String)
